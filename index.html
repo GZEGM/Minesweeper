@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trò Chơi Dò Mìn Nâng Cao</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap");
+
+      /* Thiết lập font cho toàn bộ trang */
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f0f4f8; /* Màu nền nhẹ */
+        display: flex;
+        justify-content: center;
+        align-items: flex-start; /* Căn lề trên */
+        min-height: 100vh;
+        padding: 16px;
+      }
+
+      /* Vùng chứa chính */
+      .main-content {
+        max-width: 90vw;
+        width: 450px;
+        background-color: #ffffff;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
+          0 0 10px -5px rgba(0, 0, 0, 0.04);
+        border-radius: 12px;
+        padding: 20px;
+        transition: width 0.3s ease-in-out, max-width 0.3s ease-in-out; /* Thêm hiệu ứng chuyển động */
+      }
+
+      /* Lưới trò chơi */
+      #gameBoard {
+        display: grid;
+        border: 4px solid #ccd5ae;
+        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+        touch-action: none; /* Tắt các hành động cảm ứng mặc định như zoom */
+      }
+
+      /* Ô cờ */
+      .cell {
+        width: 100%;
+        height: 0;
+        padding-bottom: 100%; /* Giữ ô vuông */
+        position: relative;
+        background-color: #e9edc9; /* Màu chưa mở */
+        border: 1px solid #ccd5ae;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.2rem;
+        font-weight: 700;
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.1s, transform 0.1s;
+      }
+
+      .cell-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .cell:hover:not(.revealed):not(.flagged) {
+        background-color: #d4d7a8;
+      }
+
+      /* Ô đã mở */
+      .revealed {
+        background-color: #feffe0; /* Màu đã mở */
+        border: 1px solid #d4d7a8;
+        cursor: default;
+      }
+
+      /* Màu số */
+      .c1 {
+        color: #0000ff;
+      }
+      .c2 {
+        color: #008000;
+      }
+      .c3 {
+        color: #ff0000;
+      }
+      .c4 {
+        color: #000080;
+      }
+      .c5 {
+        color: #800000;
+      }
+      .c6 {
+        color: #008080;
+      }
+      .c7 {
+        color: #000000;
+      }
+      .c8 {
+        color: #808080;
+      }
+
+      /* Mìn */
+      .mine {
+        background-color: #ff4d4d !important;
+        color: white;
+        animation: explode 0.5s ease-out;
+      }
+      .mine .cell-content {
+        font-size: 1.5rem;
+      }
+
+      /* Cờ (Flag) */
+      .flagged {
+        color: #ff3838;
+        background-color: #f7e6e6;
+      }
+      .mine-revealed-admin {
+        background-color: #f9d863 !important;
+        color: #8a6d00;
+      }
+      .cell:active:not(.revealed):not(.flagged) {
+        transform: scale(0.95);
+      }
+
+      /* Hiệu ứng nổ */
+      @keyframes explode {
+        0% {
+          transform: scale(0.5);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.2);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .shadow-neon {
+        box-shadow: 0 0 5px #ff7f50, 0 0 10px #ff7f50, 0 0 15px #ff7f50;
+      }
+
+      /* Modal Styles */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: none; /* Mặc định ẩn */
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(4px);
+      }
+      .modal-content {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        max-width: 90%;
+        width: 450px;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative; /* For command suggestions */
+      }
+
+      /* Style cho các nút phụ trợ hình tròn */
+      .helper-icon-button {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
+        color: white;
+        font-weight: bold;
+        line-height: 1;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .helper-icon-button:hover:not(:disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+      }
+      .helper-icon-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .helper-icon-count {
+        font-size: 0.75rem;
+        margin-top: 2px;
+        background: rgba(0, 0, 0, 0.2);
+        padding: 1px 6px;
+        border-radius: 9999px;
+      }
+
+      /* Hiệu ứng khiên */
+      .shield-active {
+        box-shadow: 0 0 15px 5px #3498db, inset 0 0 10px #3498db;
+      }
+
+      /* Hiệu ứng quét */
+      .scanner-active {
+        cursor: crosshair;
+      }
+      .scanned-cell {
+        animation: scan-pulse 0.7s;
+      }
+      @keyframes scan-pulse {
+        0% {
+          background-color: rgba(255, 255, 0, 0.5);
+        }
+        100% {
+          background-color: transparent;
+        }
+      }
+
+      /* Gợi ý lệnh */
+      #commandSuggestions {
+        position: absolute;
+        bottom: 100%; /* Position it above the input */
+        left: 24px; /* Align with modal padding */
+        right: 24px;
+        margin-bottom: 5px; /* Space between suggestions and input */
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 1010;
+        max-height: 150px;
+        overflow-y: auto;
+      }
+
+      .suggestion-item {
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      .suggestion-item:hover {
+        background-color: #f3f4f6;
+      }
+      .suggestion-item:not(:last-child) {
+        border-bottom: 1px solid #e5e7eb;
+      }
+    </style>
+  </head>
+  <body oncontextmenu="return false;">
+    <div class="main-content">
+      <!-- Main Menu View -->
+      <div id="mainMenu">
+        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-2">
+          💣 Chào Mừng Đến Dò Mìn 🚩
+        </h1>
+        <p class="text-center text-gray-600 mb-4">
+          Người chơi:
+          <span id="playerNameDisplay" class="font-bold text-indigo-600"
+            >...</span
+          >
+        </p>
+        <h2 class="text-xl font-bold text-center text-gray-700 mb-4">
+          Chọn Cấp Độ
+        </h2>
+        <div id="mapSelection" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Các nút chọn map sẽ được tạo bằng JS -->
+        </div>
+        <button
+          id="leaderboardMenuButton"
+          class="mt-4 w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
+        >
+          🏆 Bảng Xếp Hạng
+        </button>
+      </div>
+
+      <!-- Game View -->
+      <div id="gameView" class="hidden">
+        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-4">
+          💣 Dò Mìn Nâng Cao 🚩
+        </h1>
+        <div
+          class="flex justify-between items-center bg-gray-100 p-3 rounded-t-lg border-b border-gray-200 shadow-inner"
+        >
+          <div class="flex flex-col items-center">
+            <div class="text-xs font-semibold text-red-500">Mìn (🚩)</div>
+            <div class="text-xl font-bold text-red-600 flex items-center">
+              <span id="minesLeft" class="w-8 text-center">0</span>
+            </div>
+          </div>
+          <div class="flex flex-col items-center">
+            <div class="text-xs font-semibold text-blue-500">Cấp Độ</div>
+            <div id="mapName" class="text-lg font-bold text-blue-600"></div>
+          </div>
+          <div class="flex flex-col items-center">
+            <div class="text-xs font-semibold text-green-500">
+              Thời Gian (s)
+            </div>
+            <div class="text-xl font-bold text-green-600 flex items-center">
+              <span id="timer" class="w-12 text-center">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="statusMessage"
+          class="text-center font-bold text-gray-700 py-2 bg-yellow-50 rounded-b-lg mb-4"
+        >
+          Sẵn sàng
+        </div>
+        <div id="gameBoard" class="mb-4"></div>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <button
+            id="resetButton"
+            class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-indigo-300"
+          >
+            Chơi Lại
+          </button>
+          <button
+            id="backToMenuButton"
+            class="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-gray-300"
+          >
+            Quay Lại Menu
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <button
+            id="guideButton"
+            class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-yellow-300"
+          >
+            📚 Hướng Dẫn Chơi
+          </button>
+          <button
+            id="leaderboardGameButton"
+            class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
+          >
+            🏆 Bảng Xếp Hạng
+          </button>
+        </div>
+        <button
+          id="adminRevealMinesButton"
+          class="hidden w-full bg-red-800 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-red-400 mt-3"
+        >
+          ⚠️ Hiện Tất Cả Mìn (Admin)
+        </button>
+
+        <!-- PHỤ TRỢ (HELPER TOOLS) -->
+        <div class="mt-4 p-4 bg-gray-100 rounded-lg shadow">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg text-gray-700">🛠️ Phụ Trợ</h3>
+            <button
+              id="commandMenuButton"
+              class="bg-gray-600 hover:bg-gray-700 text-white font-bold p-2 rounded-full transition duration-200"
+              title="Mở menu lệnh"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m18 18-6-6 6-6" />
+                <path d="m6 6 6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+          <div class="flex justify-around space-x-2">
+            <button
+              id="xrayButton"
+              class="helper-icon-button bg-green-500 hover:bg-green-600"
+              title="Tia X: Mở 1 ô an toàn ngẫu nhiên"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" /></svg
+              ><span class="helper-icon-count" id="xrayCount">0</span>
+            </button>
+            <button
+              id="autoFlagButton"
+              class="helper-icon-button bg-blue-500 hover:bg-blue-600"
+              title="Cờ Tự Động: Cắm cờ 1 mìn chắc chắn"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"
+                />
+                <line x1="4" x2="4" y1="22" y2="15" /></svg
+              ><span class="helper-icon-count" id="autoFlagCount">0</span>
+            </button>
+            <button
+              id="surferButton"
+              class="helper-icon-button bg-purple-500 hover:bg-purple-600"
+              title="Lướt Sóng: Tự động mở nhanh các ô lân cận an toàn"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M2 20a2 2 0 1 0 4 0 2 2 0 1 0-4 0" />
+                <path d="M14 20a2 2 0 1 0 4 0 2 2 0 1 0-4 0" />
+                <path d="M6 16.63V18a2 2 0 1 0 4 0v-1.38" />
+                <path d="M18 16.63V18a2 2 0 1 0 4 0v-1.38" />
+                <path
+                  d="M2.54 13.97l2.88 4.75a1 1 0 0 0 1.63.15l2.45-3.66a1 1 0 0 1 1.05-.14l2.87 1.8a1 1 0 0 0 1.54-.93l-.33-4.32a1 1 0 0 1 .42-1.07l2.22-1.63a1 1 0 0 0 .52-1.29l-1.48-4.22"
+                /></svg
+              ><span class="helper-icon-count" id="surferCount">0</span>
+            </button>
+            <button
+              id="shieldButton"
+              class="helper-icon-button bg-cyan-500 hover:bg-cyan-600"
+              title="Khiên: Bảo vệ bạn khỏi 1 quả mìn"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
+              ><span class="helper-icon-count" id="shieldCount">0</span>
+            </button>
+            <button
+              id="scannerButton"
+              class="helper-icon-button bg-orange-500 hover:bg-orange-600"
+              title="Máy Dò: Quét khu vực 3x3 để đếm mìn"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" /></svg
+              ><span class="helper-icon-count" id="scannerCount">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 p-3 bg-blue-50 rounded-lg shadow-inner">
+          <h3 class="font-bold text-lg text-blue-700 mb-2">
+            Thành Tích Cá Nhân
+          </h3>
+          <div class="flex justify-between text-sm text-gray-700 mt-2">
+            <span class="font-semibold">Thời gian tốt nhất:</span>
+            <span id="personalBestTime" class="font-bold text-lg text-blue-900"
+              >--s</span
+            >
+          </div>
+          <p class="text-xs text-gray-500 italic mt-3">
+            Điểm được lưu trên tài khoản của bạn cho mỗi cấp độ.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nhập Tên -->
+    <div id="displayNameModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Chào mừng bạn!</h2>
+        <p class="text-gray-600 mb-4">
+          Vui lòng nhập tên hiển thị của bạn để tham gia bảng xếp hạng.
+        </p>
+        <form id="displayNameForm">
+          <input
+            type="text"
+            id="displayNameInput"
+            class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
+            placeholder="Tên của bạn..."
+            required
+            minlength="3"
+            maxlength="20"
+          />
+          <button
+            type="submit"
+            id="submitDisplayNameButton"
+            class="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
+          >
+            Xác Nhận
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Bảng Xếp Hạng -->
+    <div id="leaderboardModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
+          🏆 Bảng Xếp Hạng
+        </h2>
+        <div class="mb-4">
+          <label
+            for="leaderboardMapSelect"
+            class="block text-sm font-medium text-gray-700 mb-1"
+            >Chọn bảng xếp hạng:</label
+          >
+          <select
+            id="leaderboardMapSelect"
+            class="w-full border border-gray-300 rounded-lg p-2"
+          >
+            <option value="total">Tổng Thời Gian Chơi</option>
+            <!-- Thêm các map khác bằng JS -->
+          </select>
+        </div>
+        <div id="leaderboardContent" class="space-y-2">
+          <!-- Nội dung BXH sẽ được tải vào đây -->
+          <p class="text-center text-gray-500">Đang tải...</p>
+        </div>
+        <button
+          id="closeLeaderboardButton"
+          class="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Hướng Dẫn Chơi -->
+    <div id="guideModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
+          📚 Hướng Dẫn Chơi Dò Mìn
+        </h2>
+        <div class="text-gray-700 space-y-3">
+          <p>Mục tiêu là mở tất cả các ô trên bảng mà không chạm phải mìn.</p>
+          <h3 class="font-semibold text-lg text-blue-600">Quy tắc cơ bản:</h3>
+          <ul class="list-disc list-inside ml-4 space-y-2 text-sm">
+            <li><b>Mở Ô (Nhấn):</b> Nhấn vào một ô để mở nó.</li>
+            <li>
+              <b>Cắm Cờ (Nhấn giữ/Chuột phải):</b> Đánh dấu ô bạn nghĩ là mìn.
+            </li>
+            <li>
+              <b>Số (1-8):</b> Cho biết có bao nhiêu quả mìn trong 8 ô lân cận.
+            </li>
+            <li>
+              <b>Mở Nhanh (Chord):</b> Nhấn vào một ô số đã mở khi bạn đã cắm đủ
+              số cờ tương ứng xung quanh nó. Hành động này sẽ mở tất cả các ô
+              chưa được cắm cờ còn lại.
+            </li>
+          </ul>
+          <h3 class="font-semibold text-lg text-green-600 mt-4">
+            Phụ Trợ (Helper Tools):
+          </h3>
+          <ul
+            id="guideHelpersList"
+            class="list-disc list-inside ml-4 space-y-2 text-sm"
+          >
+            <li><b>Tia X:</b> Mở một ô ngẫu nhiên chắc chắn không có mìn.</li>
+            <li>
+              <b>Cờ Tự Động:</b> Tìm và cắm cờ vào một ô chắc chắn là mìn (dựa
+              trên các số đã mở).
+            </li>
+            <li>
+              <b>Lướt Sóng:</b> Tự động tìm một ô số đã có đủ cờ và thực hiện
+              hành động "Mở Nhanh" cho bạn.
+            </li>
+            <li>
+              <b>Khiên:</b> Bảo vệ bạn khỏi quả mìn đầu tiên bạn vô tình nhấn
+              phải.
+            </li>
+            <li>
+              <b>Máy Dò:</b> Cho phép bạn chọn một ô để quét khu vực 3x3 xung
+              quanh nó và đếm số mìn.
+            </li>
+          </ul>
+          <p class="mt-4 text-sm italic text-red-500">
+            <b>Mẹo:</b> Nhấn phím
+            <kbd class="font-mono bg-gray-200 px-1 py-0.5 rounded text-gray-700"
+              >/</kbd
+            >
+            hoặc nút lệnh và gõ <b>/help</b> để nhận thêm lượt hỗ trợ theo giới
+            hạn của map!
+          </p>
+        </div>
+        <button
+          id="closeModalButton"
+          class="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Lệnh -->
+    <div id="commandModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Nhập Lệnh</h2>
+        <div id="commandSuggestions" class="hidden"></div>
+        <input
+          type="text"
+          id="commandInput"
+          class="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500"
+          placeholder="/"
+          autocomplete="off"
+        />
+        <div class="flex justify-end space-x-2 mt-4">
+          <button
+            id="closeCommandModalButton"
+            class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+          >
+            Hủy
+          </button>
+          <button
+            id="submitCommandButton"
+            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
+          >
+            Gửi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
