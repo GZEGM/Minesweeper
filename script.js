@@ -377,19 +377,27 @@ function showToast(message, type = "info") {
     success: "bg-green-500",
     error: "bg-red-500",
   };
+  // Các class ban đầu để toast ẩn bên phải
   toast.className = `transform transition-all duration-300 ease-in-out translate-x-full opacity-0 p-4 rounded-lg text-white shadow-lg ${colors[type]}`;
   toast.textContent = message;
   container.appendChild(toast);
 
+  // Hiệu ứng đi vào: Xóa các class ẩn đi để toast trượt vào và hiện ra
   setTimeout(() => {
     toast.classList.remove("translate-x-full", "opacity-0");
-    toast.classList.add("translate-x-0", "opacity-100");
   }, 100);
 
+  // Lên lịch để bắt đầu hiệu ứng đi ra và xóa toast
   setTimeout(() => {
-    toast.classList.add("opacity-0");
-    toast.addEventListener("transitionend", () => toast.remove());
-  }, 4000);
+    // ---- THAY ĐỔI CHÍNH Ở ĐÂY ----
+    // Hiệu ứng đi ra: Thêm lại các class ban đầu để toast trượt ra và mờ đi
+    toast.classList.add("translate-x-full", "opacity-0");
+
+    // Chờ hiệu ứng (300ms) chạy xong rồi xóa element
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, 4000); // Bắt đầu thoát ra sau 4 giây
 }
 
 // === FIREBASE FUNCTIONS ===
@@ -882,6 +890,9 @@ async function hostGame() {
   showView("lobby", { roomId: roomId });
 }
 
+// Thêm các dòng console.log này vào hàm joinRoom trong script.js
+// Sửa lại trong file script.js
+
 async function joinRoom(roomId) {
   if (!displayName) {
     showToast("Vui lòng đặt tên trước!", "error");
@@ -892,16 +903,32 @@ async function joinRoom(roomId) {
     showToast("Vui lòng nhập ID phòng.", "error");
     return;
   }
+
   const roomRef = ref(db, `/artifacts/${appId}/public/data/rooms/${roomId}`);
   const snapshot = await get(roomRef);
+
   if (snapshot.exists() && snapshot.val().gameState === "lobby") {
-    await set(ref(db, `${roomRef.path}/players/${userId}`), {
-      displayName: displayName,
-      status: "waiting",
-      time: 0,
-      progress: 0,
-    });
-    showView("lobby", { roomId: roomId });
+    // ---- THAY ĐỔI CHÍNH Ở ĐÂY ----
+    // Tạo một tham chiếu trực tiếp đến vị trí cần ghi dữ liệu của người chơi
+    const playerRef = ref(
+      db,
+      `/artifacts/${appId}/public/data/rooms/${roomId}/players/${userId}`
+    );
+
+    try {
+      // Sử dụng tham chiếu mới này
+      await set(playerRef, {
+        displayName: displayName,
+        status: "waiting",
+        time: 0,
+        progress: 0,
+      });
+      showView("lobby", { roomId: roomId });
+    } catch (error) {
+      console.error("Firebase SET operation failed:", error);
+      showToast("Không thể vào phòng. Đã xảy ra lỗi.", "error");
+    }
+    // ---- HẾT THAY ĐỔI ----
   } else {
     showToast("Phòng không tồn tại hoặc đã bắt đầu.", "error");
   }
