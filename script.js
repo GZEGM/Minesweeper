@@ -1544,13 +1544,12 @@ function generateBoardFromSeed(mapConfig, seed) {
           isFlagged: false,
         }))
     );
-  let minesToPlace = mapConfig.minMines;
-  if (mapConfig.name === "Map Tùy Chỉnh") {
-    minesToPlace = mapConfig.minMines;
-  } else {
-    const baseMap = MAPS.find((m) => m.name === mapConfig.name);
-    if (baseMap) minesToPlace = baseMap.minMines;
-  }
+
+  // FIX: Calculate the number of mines deterministically from the seed,
+  // the same way it's done for the actual player in initGame().
+  const minesToPlace =
+    localPrng.nextInt(mapConfig.maxMines - mapConfig.minMines + 1) +
+    mapConfig.minMines;
 
   let minesPlaced = 0;
   while (minesPlaced < minesToPlace) {
