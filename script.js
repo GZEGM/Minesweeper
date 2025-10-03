@@ -1069,14 +1069,14 @@ function setupLobbyView(roomId) {
   const unsubscribe = onValue(roomRef, (snapshot) => {
     currentRoomListener = unsubscribe;
 
-    // Khi rời phòng
-    if (currentRoomListener) {
-      currentRoomListener(); // gọi để hủy listener
-      currentRoomListener = null;
-    }
     if (!snapshot.exists()) {
       alert("Phòng đã bị đóng.");
       leaveRoom();
+      // Khi rời phòng
+      if (currentRoomListener) {
+        currentRoomListener(); // gọi để hủy listener
+        currentRoomListener = null;
+      }
       return;
     }
     const roomData = snapshot.val();
