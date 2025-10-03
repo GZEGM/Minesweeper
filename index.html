@@ -120,6 +120,11 @@
         color: #ff3838;
         background-color: #f7e6e6;
       }
+      /* Cờ tự động cắm */
+      .auto-flagged {
+        color: #1e40af; /* Màu xanh đậm */
+      }
+
       .mine-revealed-admin {
         background-color: #f9d863 !important;
         color: #8a6d00;
@@ -128,7 +133,6 @@
         transform: scale(0.95);
       }
 
-      /* Hiệu ứng nổ */
       @keyframes explode {
         0% {
           transform: scale(0.5);
@@ -155,7 +159,7 @@
         width: 100%;
         height: 100%;
         background: rgba(0, 0, 0, 0.6);
-        display: none; /* Mặc định ẩn */
+        display: none;
         justify-content: center;
         align-items: center;
         z-index: 1000;
@@ -170,10 +174,10 @@
         box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
         max-height: 80vh;
         overflow-y: auto;
-        position: relative; /* For command suggestions */
+        position: relative;
       }
 
-      /* Style cho các nút phụ trợ hình tròn */
+      /* Nút phụ trợ */
       .helper-icon-button {
         width: 60px;
         height: 60px;
@@ -204,12 +208,10 @@
         border-radius: 9999px;
       }
 
-      /* Hiệu ứng khiên */
+      /* Hiệu ứng khiên & quét */
       .shield-active {
         box-shadow: 0 0 15px 5px #3498db, inset 0 0 10px #3498db;
       }
-
-      /* Hiệu ứng quét */
       .scanner-active {
         cursor: crosshair;
       }
@@ -228,10 +230,10 @@
       /* Gợi ý lệnh */
       #commandSuggestions {
         position: absolute;
-        bottom: 100%; /* Position it above the input */
-        left: 24px; /* Align with modal padding */
+        bottom: 100%;
+        left: 24px;
         right: 24px;
-        margin-bottom: 5px; /* Space between suggestions and input */
+        margin-bottom: 5px;
         background: white;
         border: 1px solid #d1d5db;
         border-radius: 8px;
@@ -240,7 +242,6 @@
         max-height: 150px;
         overflow-y: auto;
       }
-
       .suggestion-item {
         padding: 8px 12px;
         cursor: pointer;
@@ -251,12 +252,31 @@
       .suggestion-item:not(:last-child) {
         border-bottom: 1px solid #e5e7eb;
       }
+
+      /* Leaderboard Tabs */
+      .tab-button {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid transparent;
+      }
+      .tab-button.active {
+        background-color: #e0e7ff;
+        color: #4338ca;
+        border-color: #a5b4fc;
+      }
+      .tab-button:not(.active) {
+        background-color: #f3f4f6;
+        color: #4b5563;
+      }
     </style>
   </head>
   <body oncontextmenu="return false;">
     <div class="main-content">
       <!-- Main Menu View -->
-      <div id="mainMenu">
+      <div id="mainMenuView">
         <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-2">
           💣 Chào Mừng Đến Dò Mìn 🚩
         </h1>
@@ -266,12 +286,27 @@
             >...</span
           >
         </p>
-        <h2 class="text-xl font-bold text-center text-gray-700 mb-4">
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <button
+            id="multiplayerMenuButton"
+            class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-purple-300"
+          >
+            👥 Chơi Nhiều Người
+          </button>
+          <button
+            id="customMapMenuButton"
+            class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-orange-300"
+          >
+            ⚙️ Map Tùy Chỉnh
+          </button>
+        </div>
+        <h2 class="text-xl font-bold text-center text-gray-700 my-4">
           Chọn Cấp Độ
         </h2>
-        <div id="mapSelection" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <!-- Các nút chọn map sẽ được tạo bằng JS -->
-        </div>
+        <div
+          id="mapSelection"
+          class="grid grid-cols-1 md:grid-cols-2 gap-3"
+        ></div>
         <button
           id="leaderboardMenuButton"
           class="mt-4 w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
@@ -282,9 +317,6 @@
 
       <!-- Game View -->
       <div id="gameView" class="hidden">
-        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-4">
-          💣 Dò Mìn Nâng Cao 🚩
-        </h1>
         <div
           class="flex justify-between items-center bg-gray-100 p-3 rounded-t-lg border-b border-gray-200 shadow-inner"
         >
@@ -307,7 +339,6 @@
             </div>
           </div>
         </div>
-
         <div
           id="statusMessage"
           class="text-center font-bold text-gray-700 py-2 bg-yellow-50 rounded-b-lg mb-4"
@@ -315,7 +346,6 @@
           Sẵn sàng
         </div>
         <div id="gameBoard" class="mb-4"></div>
-
         <div class="grid grid-cols-2 gap-3 mb-3">
           <button
             id="resetButton"
@@ -335,7 +365,7 @@
             id="guideButton"
             class="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-yellow-300"
           >
-            📚 Hướng Dẫn Chơi
+            📚 Hướng Dẫn
           </button>
           <button
             id="leaderboardGameButton"
@@ -344,14 +374,6 @@
             🏆 Bảng Xếp Hạng
           </button>
         </div>
-        <button
-          id="adminRevealMinesButton"
-          class="hidden w-full bg-red-800 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-red-400 mt-3"
-        >
-          ⚠️ Hiện Tất Cả Mìn (Admin)
-        </button>
-
-        <!-- PHỤ TRỢ (HELPER TOOLS) -->
         <div class="mt-4 p-4 bg-gray-100 rounded-lg shadow">
           <div class="flex justify-between items-center mb-4">
             <h3 class="font-bold text-lg text-gray-700">🛠️ Phụ Trợ</h3>
@@ -380,7 +402,7 @@
             <button
               id="xrayButton"
               class="helper-icon-button bg-green-500 hover:bg-green-600"
-              title="Tia X: Mở 1 ô an toàn ngẫu nhiên"
+              title="Tia X"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -400,7 +422,7 @@
             <button
               id="autoFlagButton"
               class="helper-icon-button bg-blue-500 hover:bg-blue-600"
-              title="Cờ Tự Động: Cắm cờ 1 mìn chắc chắn"
+              title="Cờ Tự Động"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -422,7 +444,7 @@
             <button
               id="surferButton"
               class="helper-icon-button bg-purple-500 hover:bg-purple-600"
-              title="Lướt Sóng: Tự động mở nhanh các ô lân cận an toàn"
+              title="Lướt Sóng"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -447,7 +469,7 @@
             <button
               id="shieldButton"
               class="helper-icon-button bg-cyan-500 hover:bg-cyan-600"
-              title="Khiên: Bảo vệ bạn khỏi 1 quả mìn"
+              title="Khiên"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -466,7 +488,7 @@
             <button
               id="scannerButton"
               class="helper-icon-button bg-orange-500 hover:bg-orange-600"
-              title="Máy Dò: Quét khu vực 3x3 để đếm mìn"
+              title="Máy Dò"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -486,30 +508,276 @@
             </button>
           </div>
         </div>
-
         <div class="mt-4 p-3 bg-blue-50 rounded-lg shadow-inner">
           <h3 class="font-bold text-lg text-blue-700 mb-2">
             Thành Tích Cá Nhân
           </h3>
           <div class="flex justify-between text-sm text-gray-700 mt-2">
-            <span class="font-semibold">Thời gian tốt nhất:</span>
-            <span id="personalBestTime" class="font-bold text-lg text-blue-900"
-              >--s</span
+            <span class="font-semibold">Thời gian tốt nhất:</span
+            ><span id="personalBestTime" class="font-bold text-lg text-blue-900"
+              >--:--</span
             >
           </div>
-          <p class="text-xs text-gray-500 italic mt-3">
-            Điểm được lưu trên tài khoản của bạn cho mỗi cấp độ.
-          </p>
         </div>
+        <button
+          id="adminRevealMinesButton"
+          class="hidden w-full bg-red-800 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition duration-200 mt-3"
+        >
+          ⚠️ Hiện Mìn (Admin)
+        </button>
+      </div>
+
+      <!-- Leaderboard View -->
+      <div id="leaderboardView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
+          🏆 Bảng Xếp Hạng
+        </h2>
+        <div id="leaderboardTabs" class="flex flex-wrap gap-2 mb-4"></div>
+        <div id="leaderboardContent" class="space-y-2">
+          <p class="text-center text-gray-500">Đang tải...</p>
+        </div>
+        <button
+          class="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
+        >
+          Quay Lại Menu
+        </button>
+      </div>
+
+      <!-- Custom Map View -->
+      <div id="customMapView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+          ⚙️ Tạo Map Tùy Chỉnh
+        </h2>
+        <form id="customMapForm" class="space-y-4">
+          <div>
+            <label for="customRows" class="block font-medium"
+              >Số Dòng (5-125)</label
+            ><input
+              type="number"
+              id="customRows"
+              value="16"
+              min="5"
+              max="125"
+              class="w-full border rounded p-2"
+            />
+          </div>
+          <div>
+            <label for="customCols" class="block font-medium"
+              >Số Cột (5-125)</label
+            ><input
+              type="number"
+              id="customCols"
+              value="16"
+              min="5"
+              max="125"
+              class="w-full border rounded p-2"
+            />
+          </div>
+          <div>
+            <label for="customMines" class="block font-medium">Số Mìn</label
+            ><input
+              type="number"
+              id="customMines"
+              value="40"
+              min="1"
+              class="w-full border rounded p-2"
+            />
+          </div>
+          <h3 class="font-bold pt-2">Số Lượng Phụ Trợ</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="customXray">Tia X</label
+              ><input
+                type="number"
+                id="customXray"
+                value="3"
+                min="0"
+                max="99"
+                class="w-full border rounded p-1"
+              />
+            </div>
+            <div>
+              <label for="customAutoFlag">Cờ Tự Động</label
+              ><input
+                type="number"
+                id="customAutoFlag"
+                value="3"
+                min="0"
+                max="99"
+                class="w-full border rounded p-1"
+              />
+            </div>
+            <div>
+              <label for="customSurfer">Lướt Sóng</label
+              ><input
+                type="number"
+                id="customSurfer"
+                value="2"
+                min="0"
+                max="99"
+                class="w-full border rounded p-1"
+              />
+            </div>
+            <div>
+              <label for="customShield">Khiên</label
+              ><input
+                type="number"
+                id="customShield"
+                value="2"
+                min="0"
+                max="99"
+                class="w-full border rounded p-1"
+              />
+            </div>
+            <div>
+              <label for="customScanner">Máy Dò</label
+              ><input
+                type="number"
+                id="customScanner"
+                value="2"
+                min="0"
+                max="99"
+                class="w-full border rounded p-1"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg"
+          >
+            Bắt Đầu Chơi
+          </button>
+        </form>
+        <button
+          class="mt-3 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
+        >
+          Quay Lại Menu
+        </button>
+      </div>
+
+      <!-- Multiplayer View -->
+      <div id="multiplayerView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+          👥 Chơi Nhiều Người
+        </h2>
+        <div class="space-y-4">
+          <button
+            id="hostGameButton"
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg text-lg"
+          >
+            Tạo Phòng Mới
+          </button>
+          <div class="relative flex items-center">
+            <hr class="w-full" />
+            <span
+              class="absolute left-1/2 -translate-x-1/2 bg-white px-2 text-gray-500"
+              >hoặc</span
+            >
+            <hr />
+          </div>
+          <div class="flex gap-2">
+            <input
+              type="text"
+              id="joinRoomInput"
+              class="flex-grow border border-gray-300 rounded-lg p-3"
+              placeholder="Nhập ID phòng..."
+            />
+            <button
+              id="joinGameButton"
+              class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-5 rounded-lg"
+            >
+              Vào
+            </button>
+          </div>
+        </div>
+        <button
+          class="mt-8 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
+        >
+          Quay Lại Menu
+        </button>
+      </div>
+
+      <!-- Lobby View -->
+      <div id="lobbyView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Phòng Chờ</h2>
+        <div class="text-sm text-gray-600 mb-4">
+          ID Phòng:
+          <code
+            id="lobbyRoomId"
+            class="font-mono bg-gray-200 p-1 rounded cursor-pointer"
+            title="Sao chép ID"
+          ></code>
+        </div>
+
+        <!-- Host Controls -->
+        <div
+          id="lobbyHostControls"
+          class="hidden space-y-3 mb-4 p-3 bg-gray-50 rounded-lg"
+        >
+          <h3 class="font-bold">Cài đặt (chủ phòng)</h3>
+          <div>
+            <label for="lobbyMapSelect" class="block text-sm font-medium"
+              >Chọn Map:</label
+            >
+            <select
+              id="lobbyMapSelect"
+              class="w-full border rounded p-2"
+            ></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Chế độ chơi:</label>
+            <div class="flex gap-4">
+              <label
+                ><input
+                  type="radio"
+                  name="gameMode"
+                  value="permadeath"
+                  checked
+                />
+                Chết là hết</label
+              >
+              <label
+                ><input type="radio" name="gameMode" value="replay" /> Cho phép
+                chơi lại</label
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <h3 class="font-bold text-lg mb-2">
+            Người chơi (<span id="lobbyPlayerCount">1</span>)
+          </h3>
+          <div id="lobbyPlayerList" class="space-y-2"></div>
+        </div>
+
+        <div
+          id="lobbyGuestMessage"
+          class="text-center text-gray-500 italic my-4"
+        >
+          Chờ chủ phòng bắt đầu...
+        </div>
+        <button
+          id="startGameButton"
+          class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg"
+        >
+          Bắt Đầu
+        </button>
+        <button
+          id="leaveLobbyButton"
+          class="mt-3 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg"
+        >
+          Rời Phòng
+        </button>
       </div>
     </div>
 
-    <!-- Modal Nhập Tên -->
+    <!-- MODALS -->
     <div id="displayNameModal" class="modal-overlay">
       <div class="modal-content">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Chào mừng bạn!</h2>
         <p class="text-gray-600 mb-4">
-          Vui lòng nhập tên hiển thị của bạn để tham gia bảng xếp hạng.
+          Vui lòng nhập tên hiển thị của bạn để tham gia.
         </p>
         <form id="displayNameForm">
           <input
@@ -520,8 +788,7 @@
             required
             minlength="3"
             maxlength="20"
-          />
-          <button
+          /><button
             type="submit"
             id="submitDisplayNameButton"
             class="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
@@ -531,45 +798,10 @@
         </form>
       </div>
     </div>
-
-    <!-- Modal Bảng Xếp Hạng -->
-    <div id="leaderboardModal" class="modal-overlay">
-      <div class="modal-content">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
-          🏆 Bảng Xếp Hạng
-        </h2>
-        <div class="mb-4">
-          <label
-            for="leaderboardMapSelect"
-            class="block text-sm font-medium text-gray-700 mb-1"
-            >Chọn bảng xếp hạng:</label
-          >
-          <select
-            id="leaderboardMapSelect"
-            class="w-full border border-gray-300 rounded-lg p-2"
-          >
-            <option value="total">Tổng Thời Gian Chơi</option>
-            <!-- Thêm các map khác bằng JS -->
-          </select>
-        </div>
-        <div id="leaderboardContent" class="space-y-2">
-          <!-- Nội dung BXH sẽ được tải vào đây -->
-          <p class="text-center text-gray-500">Đang tải...</p>
-        </div>
-        <button
-          id="closeLeaderboardButton"
-          class="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded-lg transition"
-        >
-          Đóng
-        </button>
-      </div>
-    </div>
-
-    <!-- Modal Hướng Dẫn Chơi -->
     <div id="guideModal" class="modal-overlay">
       <div class="modal-content">
         <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
-          📚 Hướng Dẫn Chơi Dò Mìn
+          📚 Hướng Dẫn Chơi
         </h2>
         <div class="text-gray-700 space-y-3">
           <p>Mục tiêu là mở tất cả các ô trên bảng mà không chạm phải mìn.</p>
@@ -584,43 +816,22 @@
             </li>
             <li>
               <b>Mở Nhanh (Chord):</b> Nhấn vào một ô số đã mở khi bạn đã cắm đủ
-              số cờ tương ứng xung quanh nó. Hành động này sẽ mở tất cả các ô
-              chưa được cắm cờ còn lại.
+              số cờ tương ứng xung quanh nó.
             </li>
           </ul>
-          <h3 class="font-semibold text-lg text-green-600 mt-4">
-            Phụ Trợ (Helper Tools):
-          </h3>
-          <ul
-            id="guideHelpersList"
-            class="list-disc list-inside ml-4 space-y-2 text-sm"
-          >
+          <h3 class="font-semibold text-lg text-green-600 mt-4">Phụ Trợ:</h3>
+          <ul class="list-disc list-inside ml-4 space-y-2 text-sm">
             <li><b>Tia X:</b> Mở một ô ngẫu nhiên chắc chắn không có mìn.</li>
             <li>
-              <b>Cờ Tự Động:</b> Tìm và cắm cờ vào một ô chắc chắn là mìn (dựa
-              trên các số đã mở).
+              <b>Cờ Tự Động:</b> Tìm và cắm cờ vào một ô chắc chắn là mìn. Cờ
+              này sẽ có màu xanh.
             </li>
+            <li><b>Lướt Sóng:</b> Tự động "Mở Nhanh" một ô hợp lệ.</li>
             <li>
-              <b>Lướt Sóng:</b> Tự động tìm một ô số đã có đủ cờ và thực hiện
-              hành động "Mở Nhanh" cho bạn.
+              <b>Khiên:</b> Bảo vệ bạn khỏi quả mìn đầu tiên bạn nhấn phải.
             </li>
-            <li>
-              <b>Khiên:</b> Bảo vệ bạn khỏi quả mìn đầu tiên bạn vô tình nhấn
-              phải.
-            </li>
-            <li>
-              <b>Máy Dò:</b> Cho phép bạn chọn một ô để quét khu vực 3x3 xung
-              quanh nó và đếm số mìn.
-            </li>
+            <li><b>Máy Dò:</b> Quét khu vực 3x3 để đếm số mìn.</li>
           </ul>
-          <p class="mt-4 text-sm italic text-red-500">
-            <b>Mẹo:</b> Nhấn phím
-            <kbd class="font-mono bg-gray-200 px-1 py-0.5 rounded text-gray-700"
-              >/</kbd
-            >
-            hoặc nút lệnh và gõ <b>/help</b> để nhận thêm lượt hỗ trợ theo giới
-            hạn của map!
-          </p>
         </div>
         <button
           id="closeModalButton"
@@ -630,8 +841,6 @@
         </button>
       </div>
     </div>
-
-    <!-- Modal Lệnh -->
     <div id="commandModal" class="modal-overlay">
       <div class="modal-content">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">Nhập Lệnh</h2>
@@ -648,9 +857,8 @@
             id="closeCommandModalButton"
             class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
           >
-            Hủy
-          </button>
-          <button
+            Hủy</button
+          ><button
             id="submitCommandButton"
             class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
           >
