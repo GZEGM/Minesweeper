@@ -215,6 +215,7 @@ import {
   serverTimestamp,
   remove,
   onDisconnect,
+  update,
 } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
 // === FIREBASE & AUTH VARIABLES ===
@@ -263,9 +264,11 @@ let isShieldActive = false,
 let currentRoomListener = null,
   currentRoomId = null,
   isMultiplayer = false,
-  isMultiplayerGameRunning = false; // FIX: Prevents game restart
+  isMultiplayerGameRunning = false;
+let multiplayerStartTime = null; // For synced timer
 let lastPlayerList = {};
-let initialRoomId = null; // FEATURE: For joining via link
+let initialRoomId = null;
+let currentlySpectatingPlayerId = null; // NEW: For spectator mode
 
 // Pseudo-Random Number Generator
 class SeededRandom {
@@ -322,6 +325,11 @@ const customMapView = document.getElementById("customMapView"),
   customMapForm = document.getElementById("customMapForm");
 const mapSelectionEl = document.getElementById("mapSelection");
 const leaderboardModal = document.getElementById("leaderboardModal");
+const spectatorView = document.getElementById("spectatorView"),
+  spectatorStatusContainer = document.getElementById(
+    "spectatorStatusContainer"
+  );
+const mineHitModal = document.getElementById("mineHitModal");
 
 // === HELPER FUNCTIONS ===
 function updateHelperDisplay() {
@@ -548,12 +556,11 @@ async function initializeFirebase() {
         await loadBestTimesFromFirebase();
         await loadTotalPlayTime();
 
-        // Auto-join room if link was used
         if (initialRoomId && displayName) {
           showView("multiplayer");
           document.getElementById("joinRoomInput").value = initialRoomId;
           await joinRoom(initialRoomId);
-          initialRoomId = null; // Consume it
+          initialRoomId = null;
         } else if (initialRoomId) {
           showToast(`Vui lòng nhập tên để vào phòng ${initialRoomId}`, "info");
         }
@@ -606,12 +613,11 @@ async function setDisplayName(name, isCommand = false) {
   displayNameModal.style.display = "none";
   if (isCommand) showToast(`Đã đổi tài khoản thành: ${name}`, "success");
 
-  // Auto-join room if name was just set
   if (initialRoomId) {
     showView("multiplayer");
     document.getElementById("joinRoomInput").value = initialRoomId;
     await joinRoom(initialRoomId);
-    initialRoomId = null; // Consume it
+    initialRoomId = null;
   }
 }
 
@@ -708,6 +714,18 @@ async function updateTotalPlayTime() {
   });
 }
 
+function updateFirebaseCellState(r, c, state) {
+  if (!isMultiplayer || !currentRoomId) return;
+  const myStatus = lastPlayerList[userId]?.status;
+  if (myStatus !== "playing") return;
+
+  const cellStateRef = ref(
+    db,
+    `/artifacts/${appId}/public/data/rooms/${currentRoomId}/players/${userId}/boardState/${r}_${c}`
+  );
+  set(cellStateRef, state);
+}
+
 // === SETUP & GAME LOGIC ===
 function setupMainMenu() {
   mapSelectionEl.innerHTML = "";
@@ -763,12 +781,18 @@ function startGame(mapConfig, seed = Date.now()) {
   currentMapConfig = mapConfig;
   isMultiplayer = !!mapConfig.isMultiplayer;
   if (isMultiplayer) {
-    // FIX: Set flag to prevent restart
     isMultiplayerGameRunning = true;
   }
   prng = new SeededRandom(seed);
   showView("game", { mapConfig: mapConfig });
   initGame();
+
+  if (isMultiplayer) {
+    isGameStarted = true;
+    placeMines(-1, -1);
+    startMultiplayerTimer();
+    updateHelperDisplay();
+  }
 }
 
 function initGame() {
@@ -777,6 +801,17 @@ function initGame() {
   isAdmin = false;
   isShieldActive = false;
   isScannerActive = false;
+  currentlySpectatingPlayerId = null;
+
+  // Show game elements that might be hidden in spectator mode
+  gameBoardEl.classList.remove("hidden");
+  statusMessageEl.classList.remove("hidden");
+  spectatorView.classList.add("hidden");
+  document.getElementById("game-controls").classList.remove("hidden");
+  document.getElementById("extra-controls").classList.remove("hidden");
+  document.getElementById("helpers-section").classList.remove("hidden");
+  document.getElementById("personal-best-section").classList.remove("hidden");
+
   currentNumMines =
     prng.nextInt(currentMapConfig.maxMines - currentMapConfig.minMines + 1) +
     currentMapConfig.minMines;
@@ -839,7 +874,18 @@ function startTimer() {
   timerInterval = setInterval(() => {
     timerSeconds++;
     timerEl.textContent = timerSeconds;
-    if (isMultiplayer && currentRoomId && !isGameOver) {
+  }, 1000);
+}
+
+function startMultiplayerTimer() {
+  if (timerInterval) stopTimer();
+  timerInterval = setInterval(() => {
+    if (!multiplayerStartTime) return;
+    const elapsedMilliseconds = Date.now() - multiplayerStartTime;
+    timerSeconds = Math.floor(elapsedMilliseconds / 1000);
+    timerEl.textContent = timerSeconds;
+
+    if (currentRoomId && !isGameOver) {
       set(
         ref(
           db,
@@ -855,17 +901,15 @@ function revealCell(r_start, c_start) {
   const { rows, cols } = currentMapConfig;
   const queue = [];
 
-  // Initial checks for the very first cell clicked
   if (r_start < 0 || r_start >= rows || c_start < 0 || c_start >= cols) return;
   const initialCellData = board[r_start][c_start];
   if (initialCellData.isRevealed || initialCellData.isFlagged) return;
 
-  // Handle mine on first click
   if (initialCellData.isMine) {
     if (isShieldActive) {
       isShieldActive = false;
       gameBoardEl.classList.remove("shield-active");
-      initialCellData.isRevealed = true; // Reveal the cell with a shield icon
+      initialCellData.isRevealed = true;
       cellsRevealed++;
       const cellEl = gameBoardEl.children[r_start * cols + c_start];
       cellEl.classList.add("revealed");
@@ -883,7 +927,6 @@ function revealCell(r_start, c_start) {
     return;
   }
 
-  // Start iterative reveal
   queue.push([r_start, c_start]);
   const visited = new Set([`${r_start},${c_start}`]);
 
@@ -896,6 +939,8 @@ function revealCell(r_start, c_start) {
 
     cellData.isRevealed = true;
     cellsRevealed++;
+    updateFirebaseCellState(r, c, cellData.neighborMines);
+
     cellEl.classList.add("revealed");
     const contentEl = cellEl.querySelector(".cell-content");
 
@@ -903,15 +948,12 @@ function revealCell(r_start, c_start) {
       contentEl.textContent = cellData.neighborMines;
       contentEl.className = `cell-content c${cellData.neighborMines}`;
     } else {
-      // This is a 0-cell, queue up neighbors
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           if (dr === 0 && dc === 0) continue;
-
           const nr = r + dr;
           const nc = c + dc;
           const neighborKey = `${nr},${nc}`;
-
           if (
             nr >= 0 &&
             nr < rows &&
@@ -957,6 +999,12 @@ function checkWinCondition() {
 
 function gameOver(isWin) {
   if (isGameOver) return;
+
+  if (isMultiplayer && !isWin) {
+    showMineHitModal();
+    return;
+  }
+
   isGameOver = true;
   stopTimer();
   updateTotalPlayTime();
@@ -969,28 +1017,37 @@ function gameOver(isWin) {
       ),
       isWin ? "won" : "lost"
     );
+    if (isWin) {
+      set(
+        ref(
+          db,
+          `/artifacts/${appId}/public/data/rooms/${currentRoomId}/players/${userId}/finishTime`
+        ),
+        timerSeconds
+      );
+      enterSpectatorMode();
+    } else {
+      showGameOverModal(false);
+    }
+  } else {
+    if (isWin) submitScore();
+    showGameOverModal(isWin);
   }
 
-  setTimeout(() => {
-    showGameOverModal(isWin);
-  }, 500);
-
+  // Reveal all mines on the board for the local player
   const { rows, cols } = currentMapConfig;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cellEl = gameBoardEl.children[r * cols + c];
       const cellData = board[r][c];
       const contentEl = cellEl.querySelector(".cell-content");
-
-      if (cellData.isFlagged && cellData.isMine) {
-        contentEl.innerHTML = "✅";
-      } else if (cellData.isFlagged && !cellData.isMine) {
+      if (cellData.isFlagged && cellData.isMine) contentEl.innerHTML = "✅";
+      else if (cellData.isFlagged && !cellData.isMine)
         contentEl.innerHTML = "❌";
-      } else if (!cellData.isFlagged && cellData.isMine) {
+      else if (!cellData.isFlagged && cellData.isMine) {
         cellEl.classList.add("mine");
         contentEl.innerHTML = "💣";
       }
-
       cellEl.removeEventListener("click", handleLeftClick);
       cellEl.removeEventListener("contextmenu", handleRightClick);
     }
@@ -1008,7 +1065,6 @@ function showGameOverModal(isWin) {
     title.textContent = "CHIẾN THẮNG!";
     title.className = "text-3xl font-extrabold mb-2 text-green-500";
     message.textContent = `Chúc mừng! Bạn đã hoàn thành xuất sắc.`;
-    if (!isMultiplayer) submitScore();
   } else {
     icon.innerHTML = "💀";
     title.textContent = "THUA CUỘC!";
@@ -1148,7 +1204,9 @@ function leaveRoom() {
 
   currentRoomId = null;
   isMultiplayer = false;
-  isMultiplayerGameRunning = false; // FIX: Reset flag on leave
+  isMultiplayerGameRunning = false;
+  multiplayerStartTime = null;
+  currentlySpectatingPlayerId = null;
   showView("mainMenu");
 }
 
@@ -1156,7 +1214,6 @@ function setupLobbyView(roomId) {
   currentRoomId = roomId;
   lobbyRoomIdEl.textContent = roomId;
 
-  // FEATURE: Room Link
   const roomLinkInput = document.getElementById("lobbyRoomLink");
   const copyLinkButton = document.getElementById("copyLinkButton");
   const baseUrl = window.location.href.split("#")[0];
@@ -1174,7 +1231,6 @@ function setupLobbyView(roomId) {
   roomLinkInput.addEventListener("click", copyAction);
   copyLinkButton.addEventListener("click", copyAction);
 
-  // Populate map selection for host, if not already done
   if (lobbyMapSelect.options.length === 0) {
     MAPS.forEach((map) => {
       const option = new Option(map.name, map.name);
@@ -1232,10 +1288,10 @@ function setupLobbyView(roomId) {
       lobbyMapSelect.value = currentMapName;
     }
 
-    // FIX: Only start game once
     if (roomData.gameState === "in-progress" && !isMultiplayerGameRunning) {
       off(roomRef, "value", currentRoomListener);
       currentRoomListener = null;
+      multiplayerStartTime = roomData.startTime || Date.now();
       startGame({ ...roomData.mapConfig, isMultiplayer: true }, roomData.seed);
       listenToGameUpdates(roomId);
     }
@@ -1250,25 +1306,25 @@ function listenToGameUpdates(roomId) {
     if (!roomState.players) return;
 
     const players = roomState.players;
+    lastPlayerList = players; // Update global player list
+    const localPlayer = players[userId];
+
     let statusHTML =
       '<h3 class="font-bold mb-2">Trạng thái người chơi:</h3><div class="space-y-2">';
-    let allDone = true;
+    let finishedCount = 0;
+    const totalPlayers = Object.keys(players).length;
 
-    if (Object.keys(players).length > 0) {
-      Object.values(players).forEach((p) => {
-        if (p.status === "playing") {
-          allDone = false;
-        }
-      });
-    } else {
-      allDone = false;
-    }
+    Object.values(players).forEach((p) => {
+      if (p.status !== "playing" && p.status !== "waiting") {
+        finishedCount++;
+      }
+    });
 
     Object.values(players).forEach((p) => {
       const statusMap = {
         waiting: "🏃‍♂️",
         playing: "🤔",
-        won: "🏆",
+        won: `🏆 ${p.finishTime || ""}s`,
         lost: "💀",
       };
       let progressColor = p.status === "won" ? "bg-green-500" : "bg-blue-500";
@@ -1276,9 +1332,7 @@ function listenToGameUpdates(roomId) {
       statusHTML += `<div class="p-2 bg-gray-100 rounded">
                     <div class="flex justify-between items-center text-sm mb-1"><span class="font-semibold">${
                       p.displayName
-                    } ${statusMap[p.status] || ""}</span><span>${
-        p.time || 0
-      }s</span></div>
+                    }</span><span>${statusMap[p.status] || ""}</span></div>
                     <div class="w-full bg-gray-300 rounded-full h-2.5"><div class="${progressColor} h-2.5 rounded-full" style="width: ${
         p.progress || 0
       }%"></div></div>
@@ -1286,9 +1340,86 @@ function listenToGameUpdates(roomId) {
     });
     statusHTML += "</div>";
     multiplayerStatusEl.innerHTML = statusHTML;
+    spectatorStatusContainer.innerHTML = statusHTML;
 
-    if (allDone && roomState.gameState === "in-progress") {
+    // NEW: Spectator Logic
+    if (localPlayer && localPlayer.status === "won") {
+      const spectatorSelect = document.getElementById("spectatorSelect");
+      const currentSelection = spectatorSelect.value;
+      spectatorSelect.innerHTML = '<option value="">-- Chọn --</option>';
+
+      const stillPlaying = Object.entries(players).filter(
+        ([id, p]) => p.status === "playing" && id !== userId
+      );
+
+      const controlsDiv = document.getElementById("spectatorControls");
+      if (stillPlaying.length === 0) {
+        controlsDiv.querySelector(".flex").classList.add("hidden");
+      } else {
+        controlsDiv.querySelector(".flex").classList.remove("hidden");
+        stillPlaying.forEach(([id, p]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = p.displayName;
+          spectatorSelect.appendChild(option);
+        });
+        spectatorSelect.value = currentSelection;
+      }
+
+      if (currentlySpectatingPlayerId) {
+        const spectatedPlayerData = players[currentlySpectatingPlayerId];
+        if (spectatedPlayerData && spectatedPlayerData.status === "playing") {
+          renderSpectatorBoard(
+            spectatedPlayerData,
+            roomState.mapConfig,
+            roomState.seed
+          );
+        } else {
+          currentlySpectatingPlayerId = null;
+          spectatorSelect.value = "";
+          renderSpectatorBoard(null, null, null);
+        }
+      }
+    }
+
+    if (
+      totalPlayers > 0 &&
+      finishedCount === totalPlayers &&
+      roomState.gameState === "in-progress"
+    ) {
       showToast("Tất cả người chơi đã hoàn thành!", "success");
+
+      const winners = Object.values(players)
+        .filter((p) => p.status === "won")
+        .sort((a, b) => a.finishTime - b.finishTime);
+
+      let resultsHTML =
+        '<h3 class="font-bold mb-2 text-xl">Kết Quả Cuối Cùng</h3><div class="space-y-2">';
+      winners.forEach((winner, index) => {
+        const rankColors = {
+          0: "text-yellow-500",
+          1: "text-gray-500",
+          2: "text-amber-600",
+        };
+        resultsHTML += `<div class="p-2 bg-gray-200 rounded"><span class="font-bold ${
+          rankColors[index] || ""
+        }">${index + 1}. ${winner.displayName}</span> - ${
+          winner.finishTime
+        }s</div>`;
+      });
+      resultsHTML += `</div>`;
+
+      if (winners.length > 1) {
+        const slowestWinner = winners[winners.length - 1];
+        showToast(
+          `${slowestWinner.displayName} là người chiến thắng chậm nhất!`,
+          "info"
+        );
+      }
+
+      multiplayerStatusEl.innerHTML = resultsHTML;
+      spectatorStatusContainer.innerHTML = resultsHTML;
+
       off(roomRef, "value", currentRoomListener);
       currentRoomListener = null;
       if (roomState.hostId === userId) {
@@ -1323,12 +1454,198 @@ async function triggerStartGame() {
     if (room && room.gameState === "lobby") {
       room.gameState = "in-progress";
       room.seed = Math.floor(Math.random() * 1000000);
+      room.startTime = serverTimestamp();
       Object.keys(room.players).forEach(
         (pid) => (room.players[pid].status = "playing")
       );
     }
     return room;
   });
+}
+
+function showMineHitModal() {
+  mineHitModal.style.display = "flex";
+}
+
+function resetBoardForRetry() {
+  isGameOver = false;
+  isGameStarted = true;
+  isShieldActive = false;
+  isScannerActive = false;
+
+  minesLeft = currentNumMines;
+  cellsRevealed = 0;
+
+  minesLeftEl.textContent = currentNumMines;
+  statusMessageEl.textContent = "Thử lại! Cẩn thận hơn nhé.";
+
+  board = Array(currentMapConfig.rows)
+    .fill(0)
+    .map(() =>
+      Array(currentMapConfig.cols)
+        .fill(0)
+        .map(() => ({
+          isMine: false,
+          neighborMines: 0,
+          isRevealed: false,
+          isFlagged: false,
+        }))
+    );
+
+  gameBoardEl.innerHTML = "";
+  for (let r = 0; r < currentMapConfig.rows; r++) {
+    for (let c = 0; c < currentMapConfig.cols; c++) {
+      const cellEl = document.createElement("div");
+      cellEl.className = "cell";
+      cellEl.dataset.row = r;
+      cellEl.dataset.col = c;
+      const contentEl = document.createElement("div");
+      contentEl.className = "cell-content";
+      cellEl.appendChild(contentEl);
+      cellEl.addEventListener("click", handleLeftClick);
+      cellEl.addEventListener("contextmenu", handleRightClick);
+      gameBoardEl.appendChild(cellEl);
+    }
+  }
+
+  placeMines(-1, -1);
+  mineHitModal.style.display = "none";
+  set(
+    ref(
+      db,
+      `/artifacts/${appId}/public/data/rooms/${currentRoomId}/players/${userId}/boardState`
+    ),
+    {}
+  );
+}
+
+function enterSpectatorMode() {
+  gameBoardEl.classList.add("hidden");
+  document.getElementById("game-controls").classList.add("hidden");
+  document.getElementById("extra-controls").classList.add("hidden");
+  document.getElementById("helpers-section").classList.add("hidden");
+  document.getElementById("personal-best-section").classList.add("hidden");
+  statusMessageEl.classList.add("hidden");
+
+  spectatorView.classList.remove("hidden");
+}
+
+function generateBoardFromSeed(mapConfig, seed) {
+  const localPrng = new SeededRandom(seed);
+  const newBoard = Array(mapConfig.rows)
+    .fill(0)
+    .map(() =>
+      Array(mapConfig.cols)
+        .fill(0)
+        .map(() => ({
+          isMine: false,
+          neighborMines: 0,
+          isRevealed: false,
+          isFlagged: false,
+        }))
+    );
+  let minesToPlace = mapConfig.minMines;
+  if (mapConfig.name === "Map Tùy Chỉnh") {
+    minesToPlace = mapConfig.minMines;
+  } else {
+    const baseMap = MAPS.find((m) => m.name === mapConfig.name);
+    if (baseMap) minesToPlace = baseMap.minMines;
+  }
+
+  let minesPlaced = 0;
+  while (minesPlaced < minesToPlace) {
+    const r = localPrng.nextInt(mapConfig.rows);
+    const c = localPrng.nextInt(mapConfig.cols);
+    if (!newBoard[r][c].isMine) {
+      newBoard[r][c].isMine = true;
+      minesPlaced++;
+    }
+  }
+  for (let r = 0; r < mapConfig.rows; r++) {
+    for (let c = 0; c < mapConfig.cols; c++) {
+      if (newBoard[r][c].isMine) continue;
+      let count = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr,
+            nc = c + dc;
+          if (
+            nr >= 0 &&
+            nr < mapConfig.rows &&
+            nc >= 0 &&
+            nc < mapConfig.cols &&
+            newBoard[nr][nc].isMine
+          ) {
+            count++;
+          }
+        }
+      }
+      newBoard[r][c].neighborMines = count;
+    }
+  }
+  return newBoard;
+}
+
+function renderSpectatorBoard(playerData, mapConfig, seed) {
+  const wrapper = document.getElementById("spectatorBoardWrapper");
+  wrapper.innerHTML = "";
+  if (!playerData || !mapConfig || !seed) return;
+
+  const baseBoard = generateBoardFromSeed(mapConfig, seed);
+  const playerBoardState = playerData.boardState || {};
+  Object.keys(playerBoardState).forEach((key) => {
+    const [r, c] = key.split("_").map(Number);
+    const state = playerBoardState[key];
+    if (baseBoard[r] && baseBoard[r][c]) {
+      if (state === "F") {
+        baseBoard[r][c].isFlagged = true;
+      } else {
+        baseBoard[r][c].isRevealed = true;
+      }
+    }
+  });
+
+  const boardEl = document.createElement("div");
+  boardEl.id = "spectatorBoard";
+  const maxBoardWidth = mainContentEl.clientWidth - 50;
+  const cellPixelSize = Math.max(
+    12,
+    Math.min(30, Math.floor(maxBoardWidth / mapConfig.cols))
+  );
+  boardEl.style.width = `${cellPixelSize * mapConfig.cols}px`;
+  boardEl.style.gridTemplateColumns = `repeat(${mapConfig.cols}, 1fr)`;
+
+  for (let r = 0; r < mapConfig.rows; r++) {
+    for (let c = 0; c < mapConfig.cols; c++) {
+      const cellData = baseBoard[r][c];
+      const cellEl = document.createElement("div");
+      cellEl.className = "cell";
+      cellEl.style.height = `${cellPixelSize}px`;
+      cellEl.style.paddingBottom = "0";
+      cellEl.style.cursor = "default";
+      cellEl.style.fontSize = `${cellPixelSize * 0.6}px`;
+
+      const contentEl = document.createElement("div");
+      contentEl.className = "cell-content";
+
+      if (cellData.isRevealed) {
+        cellEl.classList.add("revealed");
+        if (cellData.isMine) {
+          contentEl.innerHTML = "💣";
+          cellEl.classList.add("mine");
+        } else if (cellData.neighborMines > 0) {
+          contentEl.textContent = cellData.neighborMines;
+          contentEl.className = `cell-content c${cellData.neighborMines}`;
+        }
+      } else if (cellData.isFlagged) {
+        cellEl.classList.add("flagged");
+        contentEl.innerHTML = "🚩";
+      }
+      cellEl.appendChild(contentEl);
+      boardEl.appendChild(cellEl);
+    }
+  }
+  wrapper.appendChild(boardEl);
 }
 
 // === EVENT HANDLERS & INITIALIZATION ===
@@ -1368,6 +1685,7 @@ function toggleFlag(r, c, isAuto = false) {
   if (cellData.isRevealed) return;
   const cellEl = gameBoardEl.children[r * currentMapConfig.cols + c];
   cellData.isFlagged = !cellData.isFlagged;
+  updateFirebaseCellState(r, c, cellData.isFlagged ? "F" : null);
   const contentEl = cellEl.querySelector(".cell-content");
   if (cellData.isFlagged) {
     cellEl.classList.add("flagged");
@@ -1384,10 +1702,19 @@ function toggleFlag(r, c, isAuto = false) {
 
 function placeMines(startR, startC) {
   let minesPlaced = 0;
+  const safeZone = new Set();
+  if (startR !== -1 && startC !== -1) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        safeZone.add(`${startR + dr},${startC + dc}`);
+      }
+    }
+  }
+
   while (minesPlaced < currentNumMines) {
     const r = prng.nextInt(currentMapConfig.rows);
     const c = prng.nextInt(currentMapConfig.cols);
-    if (!board[r][c].isMine && (r !== startR || c !== startC)) {
+    if (!board[r][c].isMine && !safeZone.has(`${r},${c}`)) {
       board[r][c].isMine = true;
       minesPlaced++;
     }
@@ -1452,12 +1779,10 @@ async function loadBestTimesFromFirebase() {
 }
 
 window.onload = async function () {
-  // FEATURE: Parse URL for room ID at the beginning
   const hash = window.location.hash.substring(1);
   if (hash.includes("roomId=")) {
     const params = new URLSearchParams(hash);
     initialRoomId = params.get("roomId");
-    // Clear hash to prevent re-joining on refresh
     history.pushState(
       "",
       document.title,
@@ -1497,7 +1822,7 @@ window.onload = async function () {
     );
   document
     .getElementById("closeCustomMapButton")
-    .addEventListener("click", () => customMapView.classList.add("hidden"));
+    .addEventListener("click", () => showView("mainMenu"));
 
   customMapForm.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -1601,6 +1926,23 @@ window.onload = async function () {
       gameOverModal.style.display = "none";
       isMultiplayer ? leaveRoom() : showView("mainMenu");
     });
+  document
+    .getElementById("retryBoardButton")
+    .addEventListener("click", resetBoardForRetry);
+
+  // NEW: Spectator event listeners
+  document
+    .getElementById("spectatorSelect")
+    .addEventListener("change", (event) => {
+      currentlySpectatingPlayerId = event.target.value;
+      if (!currentlySpectatingPlayerId) {
+        renderSpectatorBoard(null, null, null);
+      }
+      // Re-render is handled by listenToGameUpdates
+    });
+  document
+    .getElementById("spectatorExitButton")
+    .addEventListener("click", leaveRoom);
 };
 
 window.addEventListener("beforeunload", () => {
