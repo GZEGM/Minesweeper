@@ -519,20 +519,6 @@
         </div>
       </div>
 
-      <!-- Leaderboard View -->
-      <div id="leaderboardView" class="hidden">
-        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
-          🏆 Bảng Xếp Hạng
-        </h2>
-        <div id="leaderboardTabs" class="flex flex-wrap gap-2 mb-4"></div>
-        <div id="leaderboardContent" class="space-y-2"></div>
-        <button
-          class="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
-        >
-          Quay Lại Menu
-        </button>
-      </div>
-
       <!-- Custom Map View (used as a separate view/modal now) -->
       <div id="customMapView" class="hidden">
         <button id="closeCustomMapButton" class="close-button">&times;</button>
@@ -699,6 +685,46 @@
             title="Sao chép ID"
           ></code>
         </div>
+        <!-- NEW: Room Link -->
+        <div class="space-y-1 mb-4">
+          <label
+            for="lobbyRoomLink"
+            class="block text-sm font-medium text-gray-700"
+            >Link phòng:</label
+          >
+          <div class="relative">
+            <input
+              type="text"
+              id="lobbyRoomLink"
+              readonly
+              class="font-mono bg-gray-100 border-gray-300 border p-2 rounded-lg w-full cursor-pointer text-xs pr-10"
+              title="Sao chép link"
+            />
+            <button
+              id="copyLinkButton"
+              class="absolute inset-y-0 right-0 flex items-center pr-3"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-gray-500 hover:text-gray-800"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path
+                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <!-- END NEW -->
         <div
           id="lobbyHostControls"
           class="hidden space-y-3 mb-4 p-3 bg-gray-50 rounded-lg"
@@ -879,6 +905,40 @@
         </div>
       </div>
     </div>
+
+    <!-- Leaderboard Modal -->
+    <div id="leaderboardModal" class="modal-overlay">
+      <div class="modal-content">
+        <button
+          class="close-button"
+          onclick="this.parentElement.parentElement.style.display='none'"
+        >
+          &times;
+        </button>
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
+          🏆 Bảng Xếp Hạng
+        </h2>
+        <div class="mb-4">
+          <label
+            for="leaderboardMapSelect"
+            class="block text-sm font-medium text-gray-700"
+            >Chọn cấp độ:</label
+          >
+          <select
+            id="leaderboardMapSelect"
+            class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+          ></select>
+        </div>
+        <div id="leaderboardModalContent" class="space-y-2"></div>
+        <button
+          onclick="this.parentElement.parentElement.style.display='none'"
+          class="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+
     <div
       id="toast-container"
       class="fixed top-5 right-5 z-[9999] space-y-2"

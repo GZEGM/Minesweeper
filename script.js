@@ -262,8 +262,10 @@ let isShieldActive = false,
   isScannerActive = false;
 let currentRoomListener = null,
   currentRoomId = null,
-  isMultiplayer = false;
+  isMultiplayer = false,
+  isMultiplayerGameRunning = false; // FIX: Prevents game restart
 let lastPlayerList = {};
+let initialRoomId = null; // FEATURE: For joining via link
 
 // Pseudo-Random Number Generator
 class SeededRandom {
@@ -289,7 +291,6 @@ const mainContentEl = document.querySelector(".main-content");
 const VIEWS = {
   mainMenu: document.getElementById("mainMenuView"),
   game: document.getElementById("gameView"),
-  leaderboard: document.getElementById("leaderboardView"),
   customMap: document.getElementById("customMapView"),
   multiplayer: document.getElementById("multiplayerView"),
   lobby: document.getElementById("lobbyView"),
@@ -302,8 +303,6 @@ const statusMessageEl = document.getElementById("statusMessage"),
   personalBestTimeEl = document.getElementById("personalBestTime");
 const multiplayerStatusEl = document.getElementById("multiplayerStatus");
 const playerNameDisplayEl = document.getElementById("playerNameDisplay");
-const leaderboardTabsEl = document.getElementById("leaderboardTabs"),
-  leaderboardContentEl = document.getElementById("leaderboardContent");
 const lobbyRoomIdEl = document.getElementById("lobbyRoomId"),
   lobbyHostControlsEl = document.getElementById("lobbyHostControls"),
   lobbyMapSelect = document.getElementById("lobbyMapSelect");
@@ -322,6 +321,145 @@ const gameOverModal = document.getElementById("gameOverModal");
 const customMapView = document.getElementById("customMapView"),
   customMapForm = document.getElementById("customMapForm");
 const mapSelectionEl = document.getElementById("mapSelection");
+const leaderboardModal = document.getElementById("leaderboardModal");
+
+// === HELPER FUNCTIONS ===
+function updateHelperDisplay() {
+  const xrayCountEl = document.getElementById("xrayCount"),
+    autoFlagCountEl = document.getElementById("autoFlagCount"),
+    surferCountEl = document.getElementById("surferCount"),
+    shieldCountEl = document.getElementById("shieldCount"),
+    scannerCountEl = document.getElementById("scannerCount");
+  const xrayButton = document.getElementById("xrayButton"),
+    autoFlagButton = document.getElementById("autoFlagButton"),
+    surferButton = document.getElementById("surferButton"),
+    shieldButton = document.getElementById("shieldButton"),
+    scannerButton = document.getElementById("scannerButton");
+  xrayCountEl.textContent = xrayUses;
+  autoFlagCountEl.textContent = autoFlagUses;
+  surferCountEl.textContent = surferUses;
+  shieldCountEl.textContent = shieldUses;
+  scannerCountEl.textContent = scannerUses;
+  const isDisabled = isGameOver || !isGameStarted;
+  xrayButton.disabled = xrayUses <= 0 || isDisabled;
+  autoFlagButton.disabled = autoFlagUses <= 0 || isDisabled;
+  surferButton.disabled = surferUses <= 0 || isDisabled;
+  shieldButton.disabled = shieldUses <= 0 || isDisabled || isShieldActive;
+  scannerButton.disabled = scannerUses <= 0 || isDisabled || isScannerActive;
+}
+
+function useXray() {
+  if (isGameOver || xrayUses <= 0 || !isGameStarted) return;
+  const safeCells = [];
+  for (let r = 0; r < currentMapConfig.rows; r++)
+    for (let c = 0; c < currentMapConfig.cols; c++)
+      if (
+        !board[r][c].isMine &&
+        !board[r][c].isRevealed &&
+        !board[r][c].isFlagged
+      )
+        safeCells.push({ r, c });
+  if (safeCells.length > 0) {
+    const { r, c } = safeCells[prng.nextInt(safeCells.length)];
+    revealCell(r, c);
+    xrayUses--;
+    updateHelperDisplay();
+    statusMessageEl.textContent = "Tia X đã mở một ô an toàn!";
+  } else {
+    statusMessageEl.textContent = "Không còn ô an toàn để dùng Tia X.";
+  }
+}
+
+function useAutoFlag() {
+  if (isGameOver || autoFlagUses <= 0 || !isGameStarted) return;
+  for (let r = 0; r < currentMapConfig.rows; r++) {
+    for (let c = 0; c < currentMapConfig.cols; c++) {
+      const cellData = board[r][c];
+      if (!cellData.isRevealed || cellData.neighborMines === 0) continue;
+      let hiddenNeighbors = [],
+        flaggedNeighbors = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr,
+            nc = c + dc;
+          if (
+            nr >= 0 &&
+            nr < currentMapConfig.rows &&
+            nc >= 0 &&
+            nc < currentMapConfig.cols
+          ) {
+            const neighbor = board[nr][nc];
+            if (!neighbor.isRevealed) {
+              if (neighbor.isFlagged) flaggedNeighbors++;
+              else hiddenNeighbors.push({ r: nr, c: nc });
+            }
+          }
+        }
+      if (
+        cellData.neighborMines === flaggedNeighbors + hiddenNeighbors.length &&
+        hiddenNeighbors.length > 0
+      ) {
+        hiddenNeighbors.forEach((cell) => {
+          if (!board[cell.r][cell.c].isFlagged)
+            toggleFlag(cell.r, cell.c, true);
+        });
+        autoFlagUses--;
+        updateHelperDisplay();
+        statusMessageEl.textContent = "Cờ Tự Động đã cắm!";
+        return;
+      }
+    }
+  }
+  statusMessageEl.textContent =
+    "Cờ Tự Động: Không tìm thấy ô chắc chắn là mìn.";
+}
+
+function useSurfer() {
+  showToast("Lướt Sóng: Tính năng đang được phát triển.", "info");
+}
+
+function useShield() {
+  if (isGameOver || shieldUses <= 0 || !isGameStarted || isShieldActive) return;
+  isShieldActive = true;
+  shieldUses--;
+  gameBoardEl.classList.add("shield-active");
+  statusMessageEl.textContent = "Khiên bảo vệ đã được kích hoạt!";
+  updateHelperDisplay();
+}
+
+function useScanner(r_scan, c_scan) {
+  if (isScannerActive) {
+    let mineCount = 0;
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = r_scan + dr,
+          nc = c_scan + dc;
+        if (
+          nr >= 0 &&
+          nr < currentMapConfig.rows &&
+          nc >= 0 &&
+          nc < currentMapConfig.cols
+        ) {
+          if (board[nr][nc].isMine) mineCount++;
+          const cellEl = gameBoardEl.children[nr * currentMapConfig.cols + nc];
+          cellEl.classList.add("scanned-cell");
+          setTimeout(() => cellEl.classList.remove("scanned-cell"), 700);
+        }
+      }
+    isScannerActive = false;
+    scannerUses--;
+    gameBoardEl.classList.remove("scanner-active");
+    statusMessageEl.textContent = `Máy Dò: Tìm thấy ${mineCount} mìn trong khu vực 3x3.`;
+    updateHelperDisplay();
+  } else {
+    if (isGameOver || scannerUses <= 0 || !isGameStarted) return;
+    isScannerActive = true;
+    gameBoardEl.classList.add("scanner-active");
+    statusMessageEl.textContent = "Chọn một ô để quét khu vực 3x3 xung quanh.";
+    updateHelperDisplay();
+  }
+}
 
 // === VIEW MANAGEMENT & TOAST NOTIFICATIONS ===
 function showView(viewId, options = {}) {
@@ -362,7 +500,6 @@ function showView(viewId, options = {}) {
   mainContentEl.style.width = width;
   mainContentEl.style.maxWidth = maxWidth;
 
-  if (viewId === "leaderboard") setupLeaderboardView(options);
   if (viewId === "lobby") setupLobbyView(options.roomId);
   if (viewId === "customMap")
     customMapView.dataset.isLobbyConfig = options.isLobbyConfig || "false";
@@ -377,27 +514,20 @@ function showToast(message, type = "info") {
     success: "bg-green-500",
     error: "bg-red-500",
   };
-  // Các class ban đầu để toast ẩn bên phải
   toast.className = `transform transition-all duration-300 ease-in-out translate-x-full opacity-0 p-4 rounded-lg text-white shadow-lg ${colors[type]}`;
   toast.textContent = message;
   container.appendChild(toast);
 
-  // Hiệu ứng đi vào: Xóa các class ẩn đi để toast trượt vào và hiện ra
   setTimeout(() => {
     toast.classList.remove("translate-x-full", "opacity-0");
   }, 100);
 
-  // Lên lịch để bắt đầu hiệu ứng đi ra và xóa toast
   setTimeout(() => {
-    // ---- THAY ĐỔI CHÍNH Ở ĐÂY ----
-    // Hiệu ứng đi ra: Thêm lại các class ban đầu để toast trượt ra và mờ đi
     toast.classList.add("translate-x-full", "opacity-0");
-
-    // Chờ hiệu ứng (300ms) chạy xong rồi xóa element
     setTimeout(() => {
       toast.remove();
     }, 300);
-  }, 4000); // Bắt đầu thoát ra sau 4 giây
+  }, 4000);
 }
 
 // === FIREBASE FUNCTIONS ===
@@ -417,6 +547,16 @@ async function initializeFirebase() {
         }
         await loadBestTimesFromFirebase();
         await loadTotalPlayTime();
+
+        // Auto-join room if link was used
+        if (initialRoomId && displayName) {
+          showView("multiplayer");
+          document.getElementById("joinRoomInput").value = initialRoomId;
+          await joinRoom(initialRoomId);
+          initialRoomId = null; // Consume it
+        } else if (initialRoomId) {
+          showToast(`Vui lòng nhập tên để vào phòng ${initialRoomId}`, "info");
+        }
       } else {
         const token =
           typeof __initial_auth_token !== "undefined"
@@ -465,6 +605,14 @@ async function setDisplayName(name, isCommand = false) {
   playerNameDisplayEl.textContent = name;
   displayNameModal.style.display = "none";
   if (isCommand) showToast(`Đã đổi tài khoản thành: ${name}`, "success");
+
+  // Auto-join room if name was just set
+  if (initialRoomId) {
+    showView("multiplayer");
+    document.getElementById("joinRoomInput").value = initialRoomId;
+    await joinRoom(initialRoomId);
+    initialRoomId = null; // Consume it
+  }
 }
 
 async function submitScore() {
@@ -490,8 +638,8 @@ async function submitScore() {
   }
 }
 
-async function fetchAndShowLeaderboard(mapName) {
-  leaderboardContentEl.innerHTML = `<p class="text-center text-gray-500">Đang tải...</p>`;
+async function fetchAndShowLeaderboard(mapName, targetElement) {
+  targetElement.innerHTML = `<p class="text-center text-gray-500">Đang tải...</p>`;
   const dataQuery = query(
     ref(db, `/artifacts/${appId}/public/data/leaderboards/${mapName}/scores`),
     orderByChild("time"),
@@ -524,10 +672,10 @@ async function fetchAndShowLeaderboard(mapName) {
       });
     }
     html += "</ol>";
-    leaderboardContentEl.innerHTML = html;
+    targetElement.innerHTML = html;
   } catch (error) {
     console.error("Error fetching leaderboard: ", error);
-    leaderboardContentEl.innerHTML = `<p class="text-center text-red-500">Lỗi tải bảng xếp hạng.</p>`;
+    targetElement.innerHTML = `<p class="text-center text-red-500">Lỗi tải bảng xếp hạng.</p>`;
   }
 }
 
@@ -535,7 +683,6 @@ async function loadTotalPlayTime() {
   if (!userId) return;
   const timeRef = ref(db, `/artifacts/${appId}/users/${userId}/totalPlayTime`);
   const snapshot = await get(timeRef);
-  // This value is just loaded, not displayed anywhere yet, but ready for updates.
 }
 
 async function updateTotalPlayTime() {
@@ -574,37 +721,51 @@ function setupMainMenu() {
   });
 }
 
-function setupLeaderboardView(options) {
-  leaderboardTabsEl.innerHTML = "";
-  let allMaps = [{ name: "Tổng" }, ...MAPS.filter((m) => !m.isCustom)];
+function setupLeaderboardModal(options = {}) {
+  const leaderboardMapSelect = document.getElementById("leaderboardMapSelect");
+  const leaderboardModalContent = document.getElementById(
+    "leaderboardModalContent"
+  );
 
-  allMaps.forEach((map) => {
-    const button = document.createElement("button");
-    button.className = "tab-button";
-    button.textContent = map.name;
-    button.dataset.mapName = map.name;
-    button.onclick = () => {
-      document
-        .querySelectorAll(".tab-button")
-        .forEach((btn) => btn.classList.remove("active"));
-      button.classList.add("active");
-      fetchAndShowLeaderboard(map.name);
+  if (leaderboardMapSelect.options.length === 0) {
+    let allMaps = [{ name: "Tổng" }, ...MAPS.filter((m) => !m.isCustom)];
+    allMaps.forEach((map) => {
+      const option = document.createElement("option");
+      option.value = map.name;
+      option.textContent = map.name;
+      leaderboardMapSelect.appendChild(option);
+    });
+
+    leaderboardMapSelect.onchange = () => {
+      fetchAndShowLeaderboard(
+        leaderboardMapSelect.value,
+        leaderboardModalContent
+      );
     };
-    leaderboardTabsEl.appendChild(button);
-  });
+  }
 
   const defaultMap = options.defaultMap || "Tổng";
-  const defaultTab = leaderboardTabsEl.querySelector(
-    `[data-map-name="${defaultMap}"]`
-  );
-  if (defaultTab) defaultTab.click();
-  else if (leaderboardTabsEl.children.length > 0)
-    leaderboardTabsEl.children[0].click();
+  if (
+    Array.from(leaderboardMapSelect.options).some(
+      (opt) => opt.value === defaultMap
+    )
+  ) {
+    leaderboardMapSelect.value = defaultMap;
+  } else {
+    leaderboardMapSelect.value = "Tổng";
+  }
+
+  fetchAndShowLeaderboard(leaderboardMapSelect.value, leaderboardModalContent);
+  leaderboardModal.style.display = "flex";
 }
 
 function startGame(mapConfig, seed = Date.now()) {
   currentMapConfig = mapConfig;
   isMultiplayer = !!mapConfig.isMultiplayer;
+  if (isMultiplayer) {
+    // FIX: Set flag to prevent restart
+    isMultiplayerGameRunning = true;
+  }
   prng = new SeededRandom(seed);
   showView("game", { mapConfig: mapConfig });
   initGame();
@@ -690,25 +851,23 @@ function startTimer() {
   }, 1000);
 }
 
-function revealCell(r, c) {
+function revealCell(r_start, c_start) {
   const { rows, cols } = currentMapConfig;
-  if (
-    r < 0 ||
-    r >= rows ||
-    c < 0 ||
-    c >= cols ||
-    board[r][c].isRevealed ||
-    board[r][c].isFlagged
-  )
-    return;
-  const cellData = board[r][c];
-  const cellEl = gameBoardEl.children[r * cols + c];
-  if (cellData.isMine) {
+  const queue = [];
+
+  // Initial checks for the very first cell clicked
+  if (r_start < 0 || r_start >= rows || c_start < 0 || c_start >= cols) return;
+  const initialCellData = board[r_start][c_start];
+  if (initialCellData.isRevealed || initialCellData.isFlagged) return;
+
+  // Handle mine on first click
+  if (initialCellData.isMine) {
     if (isShieldActive) {
       isShieldActive = false;
       gameBoardEl.classList.remove("shield-active");
-      cellData.isRevealed = true;
+      initialCellData.isRevealed = true; // Reveal the cell with a shield icon
       cellsRevealed++;
+      const cellEl = gameBoardEl.children[r_start * cols + c_start];
       cellEl.classList.add("revealed");
       cellEl.querySelector(".cell-content").innerHTML = "🛡️";
       statusMessageEl.textContent = "Khiên đã bảo vệ bạn!";
@@ -716,23 +875,59 @@ function revealCell(r, c) {
       checkWinCondition();
       return;
     }
+    const cellEl = gameBoardEl.children[r_start * cols + c_start];
     cellEl.classList.add("mine-hit");
     gameBoardEl.classList.add("board-shake");
     setTimeout(() => gameBoardEl.classList.remove("board-shake"), 500);
     gameOver(false);
     return;
   }
-  cellData.isRevealed = true;
-  cellsRevealed++;
-  cellEl.classList.add("revealed");
-  const contentEl = cellEl.querySelector(".cell-content");
-  if (cellData.neighborMines > 0) {
-    contentEl.textContent = cellData.neighborMines;
-    contentEl.className = `cell-content c${cellData.neighborMines}`;
-  } else {
-    for (let dr = -1; dr <= 1; dr++)
-      for (let dc = -1; dc <= 1; dc++)
-        if (dr !== 0 || dc !== 0) revealCell(r + dr, c + dc);
+
+  // Start iterative reveal
+  queue.push([r_start, c_start]);
+  const visited = new Set([`${r_start},${c_start}`]);
+
+  while (queue.length > 0) {
+    const [r, c] = queue.shift();
+    const cellData = board[r][c];
+    const cellEl = gameBoardEl.children[r * cols + c];
+
+    if (cellData.isRevealed || cellData.isFlagged) continue;
+
+    cellData.isRevealed = true;
+    cellsRevealed++;
+    cellEl.classList.add("revealed");
+    const contentEl = cellEl.querySelector(".cell-content");
+
+    if (cellData.neighborMines > 0) {
+      contentEl.textContent = cellData.neighborMines;
+      contentEl.className = `cell-content c${cellData.neighborMines}`;
+    } else {
+      // This is a 0-cell, queue up neighbors
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+
+          const nr = r + dr;
+          const nc = c + dc;
+          const neighborKey = `${nr},${nc}`;
+
+          if (
+            nr >= 0 &&
+            nr < rows &&
+            nc >= 0 &&
+            nc < cols &&
+            !visited.has(neighborKey)
+          ) {
+            const neighborData = board[nr][nc];
+            if (!neighborData.isRevealed && !neighborData.isFlagged) {
+              visited.add(neighborKey);
+              queue.push([nr, nc]);
+            }
+          }
+        }
+      }
+    }
   }
 
   if (isMultiplayer && currentRoomId) {
@@ -776,7 +971,9 @@ function gameOver(isWin) {
     );
   }
 
-  showGameOverModal(isWin);
+  setTimeout(() => {
+    showGameOverModal(isWin);
+  }, 500);
 
   const { rows, cols } = currentMapConfig;
   for (let r = 0; r < rows; r++) {
@@ -890,9 +1087,6 @@ async function hostGame() {
   showView("lobby", { roomId: roomId });
 }
 
-// Thêm các dòng console.log này vào hàm joinRoom trong script.js
-// Sửa lại trong file script.js
-
 async function joinRoom(roomId) {
   if (!displayName) {
     showToast("Vui lòng đặt tên trước!", "error");
@@ -908,15 +1102,12 @@ async function joinRoom(roomId) {
   const snapshot = await get(roomRef);
 
   if (snapshot.exists() && snapshot.val().gameState === "lobby") {
-    // ---- THAY ĐỔI CHÍNH Ở ĐÂY ----
-    // Tạo một tham chiếu trực tiếp đến vị trí cần ghi dữ liệu của người chơi
     const playerRef = ref(
       db,
       `/artifacts/${appId}/public/data/rooms/${roomId}/players/${userId}`
     );
 
     try {
-      // Sử dụng tham chiếu mới này
       await set(playerRef, {
         displayName: displayName,
         status: "waiting",
@@ -928,7 +1119,6 @@ async function joinRoom(roomId) {
       console.error("Firebase SET operation failed:", error);
       showToast("Không thể vào phòng. Đã xảy ra lỗi.", "error");
     }
-    // ---- HẾT THAY ĐỔI ----
   } else {
     showToast("Phòng không tồn tại hoặc đã bắt đầu.", "error");
   }
@@ -958,12 +1148,39 @@ function leaveRoom() {
 
   currentRoomId = null;
   isMultiplayer = false;
+  isMultiplayerGameRunning = false; // FIX: Reset flag on leave
   showView("mainMenu");
 }
 
 function setupLobbyView(roomId) {
   currentRoomId = roomId;
   lobbyRoomIdEl.textContent = roomId;
+
+  // FEATURE: Room Link
+  const roomLinkInput = document.getElementById("lobbyRoomLink");
+  const copyLinkButton = document.getElementById("copyLinkButton");
+  const baseUrl = window.location.href.split("#")[0];
+  const roomLink = `${baseUrl}#roomId=${roomId}`;
+  roomLinkInput.value = roomLink;
+
+  const copyAction = (e) => {
+    e.stopPropagation();
+    roomLinkInput.select();
+    navigator.clipboard
+      .writeText(roomLink)
+      .then(() => showToast("Đã sao chép link phòng!", "success"));
+  };
+
+  roomLinkInput.addEventListener("click", copyAction);
+  copyLinkButton.addEventListener("click", copyAction);
+
+  // Populate map selection for host, if not already done
+  if (lobbyMapSelect.options.length === 0) {
+    MAPS.forEach((map) => {
+      const option = new Option(map.name, map.name);
+      lobbyMapSelect.add(option);
+    });
+  }
 
   const roomRef = ref(db, `/artifacts/${appId}/public/data/rooms/${roomId}`);
   const playerRef = ref(db, `${roomRef.path}/players/${userId}`);
@@ -978,7 +1195,7 @@ function setupLobbyView(roomId) {
 
   currentRoomListener = onValue(roomRef, (snapshot) => {
     if (!snapshot.exists()) {
-      if (currentRoomId) showToast("Phòng đã bị đóng.", "info"); // Avoid toast on initial load if room not found
+      if (currentRoomId) showToast("Phòng đã bị đóng.", "info");
       leaveRoom();
       return;
     }
@@ -1003,7 +1220,6 @@ function setupLobbyView(roomId) {
       .getElementById("lobbyGuestMessage")
       .classList.toggle("hidden", isHost);
 
-    // Update map select without losing custom map
     if (isHost) {
       const currentMapName = roomData.mapConfig.name;
       const selectContainsMap = Array.from(lobbyMapSelect.options).some(
@@ -1016,7 +1232,8 @@ function setupLobbyView(roomId) {
       lobbyMapSelect.value = currentMapName;
     }
 
-    if (roomData.gameState === "in-progress") {
+    // FIX: Only start game once
+    if (roomData.gameState === "in-progress" && !isMultiplayerGameRunning) {
       off(roomRef, "value", currentRoomListener);
       currentRoomListener = null;
       startGame({ ...roomData.mapConfig, isMultiplayer: true }, roomData.seed);
@@ -1028,14 +1245,32 @@ function setupLobbyView(roomId) {
 function listenToGameUpdates(roomId) {
   const roomRef = ref(db, `/artifacts/${appId}/public/data/rooms/${roomId}`);
   currentRoomListener = onValue(roomRef, (snapshot) => {
-    if (!snapshot.exists() || !snapshot.val().players) return;
-    const players = snapshot.val().players;
+    if (!snapshot.exists()) return;
+    const roomState = snapshot.val();
+    if (!roomState.players) return;
+
+    const players = roomState.players;
     let statusHTML =
       '<h3 class="font-bold mb-2">Trạng thái người chơi:</h3><div class="space-y-2">';
     let allDone = true;
+
+    if (Object.keys(players).length > 0) {
+      Object.values(players).forEach((p) => {
+        if (p.status === "playing") {
+          allDone = false;
+        }
+      });
+    } else {
+      allDone = false;
+    }
+
     Object.values(players).forEach((p) => {
-      if (p.status === "waiting") allDone = false;
-      const statusMap = { waiting: "🏃‍♂️", won: "🏆", lost: "💀" };
+      const statusMap = {
+        waiting: "🏃‍♂️",
+        playing: "🤔",
+        won: "🏆",
+        lost: "💀",
+      };
       let progressColor = p.status === "won" ? "bg-green-500" : "bg-blue-500";
 
       statusHTML += `<div class="p-2 bg-gray-100 rounded">
@@ -1051,10 +1286,17 @@ function listenToGameUpdates(roomId) {
     });
     statusHTML += "</div>";
     multiplayerStatusEl.innerHTML = statusHTML;
-    if (allDone && isGameStarted) {
+
+    if (allDone && roomState.gameState === "in-progress") {
       showToast("Tất cả người chơi đã hoàn thành!", "success");
       off(roomRef, "value", currentRoomListener);
       currentRoomListener = null;
+      if (roomState.hostId === userId) {
+        set(
+          ref(db, `/artifacts/${appId}/public/data/rooms/${roomId}/gameState`),
+          "finished"
+        );
+      }
     }
   });
 }
@@ -1089,17 +1331,149 @@ async function triggerStartGame() {
   });
 }
 
-// === EVENT LISTENERS & INITIALIZATION ===
+// === EVENT HANDLERS & INITIALIZATION ===
+function handleLeftClick(event) {
+  if (isGameOver) return;
+  const target = event.currentTarget;
+  const r = parseInt(target.dataset.row);
+  const c = parseInt(target.dataset.col);
+  if (isScannerActive) {
+    useScanner(r, c);
+    return;
+  }
+  if (board[r][c].isRevealed) {
+    revealNeighbors(r, c);
+    return;
+  }
+  if (!isGameStarted) {
+    isGameStarted = true;
+    placeMines(r, c);
+    startTimer();
+    updateHelperDisplay();
+  }
+  revealCell(r, c);
+}
+
+function handleRightClick(event) {
+  event.preventDefault();
+  if (isGameOver || !isGameStarted) return;
+  const target = event.currentTarget;
+  const r = parseInt(target.dataset.row);
+  const c = parseInt(target.dataset.col);
+  toggleFlag(r, c);
+}
+
+function toggleFlag(r, c, isAuto = false) {
+  const cellData = board[r][c];
+  if (cellData.isRevealed) return;
+  const cellEl = gameBoardEl.children[r * currentMapConfig.cols + c];
+  cellData.isFlagged = !cellData.isFlagged;
+  const contentEl = cellEl.querySelector(".cell-content");
+  if (cellData.isFlagged) {
+    cellEl.classList.add("flagged");
+    if (isAuto) cellEl.classList.add("auto-flagged");
+    contentEl.innerHTML = "🚩";
+    minesLeft--;
+  } else {
+    cellEl.classList.remove("flagged", "auto-flagged");
+    contentEl.textContent = "";
+    minesLeft++;
+  }
+  minesLeftEl.textContent = minesLeft;
+}
+
+function placeMines(startR, startC) {
+  let minesPlaced = 0;
+  while (minesPlaced < currentNumMines) {
+    const r = prng.nextInt(currentMapConfig.rows);
+    const c = prng.nextInt(currentMapConfig.cols);
+    if (!board[r][c].isMine && (r !== startR || c !== startC)) {
+      board[r][c].isMine = true;
+      minesPlaced++;
+    }
+  }
+  for (let r = 0; r < currentMapConfig.rows; r++)
+    for (let c = 0; c < currentMapConfig.cols; c++) {
+      if (board[r][c].isMine) continue;
+      let count = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r + dr,
+            nc = c + dc;
+          if (
+            nr >= 0 &&
+            nr < currentMapConfig.rows &&
+            nc >= 0 &&
+            nc < currentMapConfig.cols &&
+            board[nr][nc].isMine
+          )
+            count++;
+        }
+      board[r][c].neighborMines = count;
+    }
+}
+
+function revealNeighbors(r, c) {
+  if (!board[r][c].isRevealed) return;
+  let flaggedCount = 0;
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr,
+        nc = c + dc;
+      if (
+        nr >= 0 &&
+        nr < currentMapConfig.rows &&
+        nc >= 0 &&
+        nc < currentMapConfig.cols &&
+        board[nr][nc].isFlagged
+      )
+        flaggedCount++;
+    }
+  if (flaggedCount === board[r][c].neighborMines) {
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++) revealCell(r + dr, c + dc);
+  }
+}
+function stopTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+}
+function displayBestTimeForCurrentMap() {
+  if (!currentMapConfig || !personalBestTimes) return;
+  const bestTime = personalBestTimes[currentMapConfig.name];
+  personalBestTimeEl.textContent = bestTime ? `${bestTime}s` : "--s";
+}
+async function loadBestTimesFromFirebase() {
+  if (!userId) return;
+  const bestTimesRef = ref(db, `/artifacts/${appId}/users/${userId}/bestTimes`);
+  const snapshot = await get(bestTimesRef);
+  personalBestTimes = snapshot.exists() ? snapshot.val() : {};
+  if (currentMapConfig) displayBestTimeForCurrentMap();
+}
+
 window.onload = async function () {
+  // FEATURE: Parse URL for room ID at the beginning
+  const hash = window.location.hash.substring(1);
+  if (hash.includes("roomId=")) {
+    const params = new URLSearchParams(hash);
+    initialRoomId = params.get("roomId");
+    // Clear hash to prevent re-joining on refresh
+    history.pushState(
+      "",
+      document.title,
+      window.location.pathname + window.location.search
+    );
+  }
+
   await initializeFirebase();
   setupMainMenu();
   document
     .getElementById("leaderboardMenuButton")
-    .addEventListener("click", () => showView("leaderboard"));
+    .addEventListener("click", () => setupLeaderboardModal());
   document
     .getElementById("leaderboardGameButton")
     .addEventListener("click", () =>
-      showView("leaderboard", { defaultMap: currentMapConfig?.name })
+      setupLeaderboardModal({ defaultMap: currentMapConfig?.name })
     );
   document
     .getElementById("multiplayerMenuButton")
@@ -1171,14 +1545,12 @@ window.onload = async function () {
     e.preventDefault();
     setDisplayName(document.getElementById("displayNameInput").value.trim());
   });
-  ["xray", "autoFlag", "surfer", "shield"].forEach((id) =>
-    document
-      .getElementById(`${id}Button`)
-      .addEventListener(
-        "click",
-        window[`use${id.charAt(0).toUpperCase() + id.slice(1)}`]
-      )
-  );
+  document.getElementById("xrayButton").addEventListener("click", useXray);
+  document
+    .getElementById("autoFlagButton")
+    .addEventListener("click", useAutoFlag);
+  document.getElementById("surferButton").addEventListener("click", useSurfer);
+  document.getElementById("shieldButton").addEventListener("click", useShield);
   document
     .getElementById("scannerButton")
     .addEventListener("click", () => useScanner(null, null));
@@ -1230,260 +1602,7 @@ window.onload = async function () {
       isMultiplayer ? leaveRoom() : showView("mainMenu");
     });
 };
+
 window.addEventListener("beforeunload", () => {
   if (currentRoomId) leaveRoom();
 });
-
-// === Dummy functions for event listeners, logic is in main script ===
-function useXray() {}
-function useAutoFlag() {}
-function useSurfer() {}
-function useShield() {}
-function useScanner() {}
-// ... (All other functions from previous version need to be here for the game to work)
-// These functions are copy-pasted from the previous step to ensure completeness
-function updateHelperDisplay() {
-  const xrayCountEl = document.getElementById("xrayCount"),
-    autoFlagCountEl = document.getElementById("autoFlagCount"),
-    surferCountEl = document.getElementById("surferCount"),
-    shieldCountEl = document.getElementById("shieldCount"),
-    scannerCountEl = document.getElementById("scannerCount");
-  const xrayButton = document.getElementById("xrayButton"),
-    autoFlagButton = document.getElementById("autoFlagButton"),
-    surferButton = document.getElementById("surferButton"),
-    shieldButton = document.getElementById("shieldButton"),
-    scannerButton = document.getElementById("scannerButton");
-  xrayCountEl.textContent = xrayUses;
-  autoFlagCountEl.textContent = autoFlagUses;
-  surferCountEl.textContent = surferUses;
-  shieldCountEl.textContent = shieldUses;
-  scannerCountEl.textContent = scannerUses;
-  const isDisabled = isGameOver || !isGameStarted;
-  xrayButton.disabled = xrayUses <= 0 || isDisabled;
-  autoFlagButton.disabled = autoFlagUses <= 0 || isDisabled;
-  surferButton.disabled = surferUses <= 0 || isDisabled;
-  shieldButton.disabled = shieldUses <= 0 || isDisabled || isShieldActive;
-  scannerButton.disabled = scannerUses <= 0 || isDisabled || isScannerActive;
-}
-useXray = function () {
-  if (isGameOver || xrayUses <= 0 || !isGameStarted) return;
-  const safeCells = [];
-  for (let r = 0; r < currentMapConfig.rows; r++)
-    for (let c = 0; c < currentMapConfig.cols; c++)
-      if (
-        !board[r][c].isMine &&
-        !board[r][c].isRevealed &&
-        !board[r][c].isFlagged
-      )
-        safeCells.push({ r, c });
-  if (safeCells.length > 0) {
-    const { r, c } = safeCells[Math.floor(Math.random() * safeCells.length)];
-    revealCell(r, c);
-    xrayUses--;
-    updateHelperDisplay();
-    statusMessageEl.textContent = "Tia X đã mở một ô an toàn!";
-  } else {
-    statusMessageEl.textContent = "Không còn ô an toàn để dùng Tia X.";
-  }
-};
-useAutoFlag = function () {
-  if (isGameOver || autoFlagUses <= 0 || !isGameStarted) return;
-  for (let r = 0; r < currentMapConfig.rows; r++) {
-    for (let c = 0; c < currentMapConfig.cols; c++) {
-      const cellData = board[r][c];
-      if (!cellData.isRevealed || cellData.neighborMines === 0) continue;
-      let hiddenNeighbors = [],
-        flaggedNeighbors = 0;
-      for (let dr = -1; dr <= 1; dr++)
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const nr = r + dr,
-            nc = c + dc;
-          if (
-            nr >= 0 &&
-            nr < currentMapConfig.rows &&
-            nc >= 0 &&
-            nc < currentMapConfig.cols
-          ) {
-            const neighbor = board[nr][nc];
-            if (!neighbor.isRevealed) {
-              if (neighbor.isFlagged) flaggedNeighbors++;
-              else hiddenNeighbors.push({ r: nr, c: nc });
-            }
-          }
-        }
-      if (
-        cellData.neighborMines === flaggedNeighbors + hiddenNeighbors.length &&
-        hiddenNeighbors.length > 0
-      ) {
-        hiddenNeighbors.forEach((cell) => {
-          if (!board[cell.r][cell.c].isFlagged)
-            toggleFlag(cell.r, cell.c, true);
-        });
-        autoFlagUses--;
-        updateHelperDisplay();
-        statusMessageEl.textContent = "Cờ Tự Động đã cắm!";
-        return;
-      }
-    }
-  }
-  statusMessageEl.textContent =
-    "Cờ Tự Động: Không tìm thấy ô chắc chắn là mìn.";
-};
-useSurfer = function () {
-  showToast("Lướt Sóng: Tính năng đang được phát triển.", "info");
-};
-useShield = function () {
-  if (isGameOver || shieldUses <= 0 || !isGameStarted || isShieldActive) return;
-  isShieldActive = true;
-  shieldUses--;
-  gameBoardEl.classList.add("shield-active");
-  statusMessageEl.textContent = "Khiên bảo vệ đã được kích hoạt!";
-  updateHelperDisplay();
-};
-useScanner = function (r_scan, c_scan) {
-  if (isScannerActive) {
-    let mineCount = 0;
-    for (let dr = -1; dr <= 1; dr++)
-      for (let dc = -1; dc <= 1; dc++) {
-        const nr = r_scan + dr,
-          nc = c_scan + dc;
-        if (
-          nr >= 0 &&
-          nr < currentMapConfig.rows &&
-          nc >= 0 &&
-          nc < currentMapConfig.cols
-        ) {
-          if (board[nr][nc].isMine) mineCount++;
-          const cellEl = gameBoardEl.children[nr * currentMapConfig.cols + nc];
-          cellEl.classList.add("scanned-cell");
-          setTimeout(() => cellEl.classList.remove("scanned-cell"), 700);
-        }
-      }
-    isScannerActive = false;
-    scannerUses--;
-    gameBoardEl.classList.remove("scanner-active");
-    statusMessageEl.textContent = `Máy Dò: Tìm thấy ${mineCount} mìn trong khu vực 3x3.`;
-    updateHelperDisplay();
-  } else {
-    if (isGameOver || scannerUses <= 0 || !isGameStarted) return;
-    isScannerActive = true;
-    gameBoardEl.classList.add("scanner-active");
-    statusMessageEl.textContent = "Chọn một ô để quét khu vực 3x3 xung quanh.";
-    updateHelperDisplay();
-  }
-};
-function handleLeftClick(event) {
-  if (isGameOver) return;
-  const target = event.currentTarget;
-  const r = parseInt(target.dataset.row);
-  const c = parseInt(target.dataset.col);
-  if (isScannerActive) {
-    useScanner(r, c);
-    return;
-  }
-  if (board[r][c].isRevealed) {
-    revealNeighbors(r, c);
-    return;
-  }
-  if (!isGameStarted) {
-    isGameStarted = true;
-    placeMines(r, c);
-    startTimer();
-    updateHelperDisplay();
-  }
-  revealCell(r, c);
-}
-function handleRightClick(event) {
-  event.preventDefault();
-  if (isGameOver || !isGameStarted) return;
-  const target = event.currentTarget;
-  const r = parseInt(target.dataset.row);
-  const c = parseInt(target.dataset.col);
-  toggleFlag(r, c);
-}
-function toggleFlag(r, c, isAuto = false) {
-  const cellData = board[r][c];
-  if (cellData.isRevealed) return;
-  const cellEl = gameBoardEl.children[r * currentMapConfig.cols + c];
-  cellData.isFlagged = !cellData.isFlagged;
-  const contentEl = cellEl.querySelector(".cell-content");
-  if (cellData.isFlagged) {
-    cellEl.classList.add("flagged");
-    if (isAuto) cellEl.classList.add("auto-flagged");
-    contentEl.innerHTML = "🚩";
-    minesLeft--;
-  } else {
-    cellEl.classList.remove("flagged", "auto-flagged");
-    contentEl.textContent = "";
-    minesLeft++;
-  }
-  minesLeftEl.textContent = minesLeft;
-}
-function placeMines(startR, startC) {
-  let minesPlaced = 0;
-  while (minesPlaced < currentNumMines) {
-    const r = prng.nextInt(currentMapConfig.rows);
-    const c = prng.nextInt(currentMapConfig.cols);
-    if (!board[r][c].isMine && (r !== startR || c !== startC)) {
-      board[r][c].isMine = true;
-      minesPlaced++;
-    }
-  }
-  for (let r = 0; r < currentMapConfig.rows; r++)
-    for (let c = 0; c < currentMapConfig.cols; c++) {
-      if (board[r][c].isMine) continue;
-      let count = 0;
-      for (let dr = -1; dr <= 1; dr++)
-        for (let dc = -1; dc <= 1; dc++) {
-          const nr = r + dr,
-            nc = c + dc;
-          if (
-            nr >= 0 &&
-            nr < currentMapConfig.rows &&
-            nc >= 0 &&
-            nc < currentMapConfig.cols &&
-            board[nr][nc].isMine
-          )
-            count++;
-        }
-      board[r][c].neighborMines = count;
-    }
-}
-function revealNeighbors(r, c) {
-  if (!board[r][c].isRevealed) return;
-  let flaggedCount = 0;
-  for (let dr = -1; dr <= 1; dr++)
-    for (let dc = -1; dc <= 1; dc++) {
-      const nr = r + dr,
-        nc = c + dc;
-      if (
-        nr >= 0 &&
-        nr < currentMapConfig.rows &&
-        nc >= 0 &&
-        nc < currentMapConfig.cols &&
-        board[nr][nc].isFlagged
-      )
-        flaggedCount++;
-    }
-  if (flaggedCount === board[r][c].neighborMines) {
-    for (let dr = -1; dr <= 1; dr++)
-      for (let dc = -1; dc <= 1; dc++) revealCell(r + dr, c + dc);
-  }
-}
-function stopTimer() {
-  clearInterval(timerInterval);
-  timerInterval = null;
-}
-function displayBestTimeForCurrentMap() {
-  if (!currentMapConfig || !personalBestTimes) return;
-  const bestTime = personalBestTimes[currentMapConfig.name];
-  personalBestTimeEl.textContent = bestTime ? `${bestTime}s` : "--s";
-}
-async function loadBestTimesFromFirebase() {
-  if (!userId) return;
-  const bestTimesRef = ref(db, `/artifacts/${appId}/users/${userId}/bestTimes`);
-  const snapshot = await get(bestTimesRef);
-  personalBestTimes = snapshot.exists() ? snapshot.val() : {};
-  if (currentMapConfig) displayBestTimeForCurrentMap();
-}
