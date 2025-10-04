@@ -231,23 +231,6 @@
           background-color: transparent;
         }
       }
-      .tab-button {
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s;
-        border: 2px solid transparent;
-      }
-      .tab-button.active {
-        background-color: #e0e7ff;
-        color: #4338ca;
-        border-color: #a5b4fc;
-      }
-      .tab-button:not(.active) {
-        background-color: #f3f4f6;
-        color: #4b5563;
-      }
       .close-button {
         position: absolute;
         top: 10px;
@@ -269,6 +252,21 @@
         background-color: #e5e7eb;
         transform: rotate(90deg);
       }
+      .chat-message {
+        padding: 4px 8px;
+        border-radius: 8px;
+        margin-bottom: 4px;
+        max-width: 85%;
+        word-wrap: break-word;
+      }
+      .chat-message.me {
+        background-color: #dbeafe;
+        align-self: flex-end;
+      }
+      .chat-message.other {
+        background-color: #e5e7eb;
+        align-self: flex-start;
+      }
     </style>
   </head>
   <body oncontextmenu="return false;">
@@ -284,22 +282,35 @@
             >...</span
           >
         </p>
-        <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <button
+            id="playWithBotMenuButton"
+            class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-2 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-green-300"
+          >
+            🤖 Chơi Với Máy
+          </button>
+          <button
+            id="matchmakingMenuButton"
+            class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-2 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-red-300"
+          >
+            ⚔️ Ghép Trận
+          </button>
           <button
             id="multiplayerMenuButton"
-            class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-purple-300"
+            class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-2 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-purple-300"
           >
-            👥 Chơi Nhiều Người
+            👥 Tạo Phòng
           </button>
           <button
             id="customMapMenuButton"
-            class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-orange-300"
+            class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-2 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-orange-300"
           >
             ⚙️ Map Tùy Chỉnh
           </button>
         </div>
+
         <h2 class="text-xl font-bold text-center text-gray-700 my-4">
-          Chọn Cấp Độ
+          Chọn Cấp Độ (Chơi Đơn)
         </h2>
         <div
           id="mapSelection"
@@ -310,6 +321,97 @@
           class="mt-4 w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
         >
           🏆 Bảng Xếp Hạng
+        </button>
+      </div>
+
+      <!-- Play With Bot View -->
+      <div id="playWithBotView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">🤖 Chơi Với Máy</h2>
+        <div class="space-y-4">
+          <div>
+            <label
+              for="botDifficultySelect"
+              class="block font-medium text-gray-700"
+              >Chọn độ khó:</label
+            >
+            <select
+              id="botDifficultySelect"
+              class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            >
+              <option value="easy">Dễ</option>
+              <option value="medium">Trung Bình</option>
+              <option value="hard">Khó</option>
+              <option value="master">Bậc Thầy</option>
+            </select>
+          </div>
+          <div>
+            <label for="botMapSelect" class="block font-medium text-gray-700"
+              >Chọn Map:</label
+            >
+            <select
+              id="botMapSelect"
+              class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            ></select>
+          </div>
+          <button
+            id="startBotGameButton"
+            class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition duration-200"
+          >
+            Bắt Đầu Thi Đấu
+          </button>
+        </div>
+        <button
+          class="mt-4 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
+        >
+          Quay Lại Menu
+        </button>
+      </div>
+
+      <!-- Matchmaking View -->
+      <div id="matchmakingView" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">⚔️ Ghép Trận</h2>
+        <p class="text-center text-gray-600 mb-4">
+          Chọn chế độ để tìm trận. Chỉ áp dụng cho map Tiêu Chuẩn và Thử Thách.
+        </p>
+        <div id="matchmakingOptions" class="space-y-3">
+          <button
+            data-mode="1v1"
+            class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
+          >
+            1 vs 1
+          </button>
+          <button
+            data-mode="2v2"
+            class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
+          >
+            2 vs 2
+          </button>
+          <button
+            data-mode="3v3"
+            class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
+          >
+            3 vs 3
+          </button>
+        </div>
+        <div
+          id="matchmakingStatusContainer"
+          class="hidden mt-4 text-center p-3 bg-gray-100 rounded"
+        >
+          <p id="matchmakingStatusText">Đang tìm trận...</p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+            <div class="bg-blue-600 h-2.5 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+        <button
+          id="cancelMatchmakingButton"
+          class="hidden mt-3 w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg"
+        >
+          Hủy
+        </button>
+        <button
+          class="mt-3 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition back-to-menu-button"
+        >
+          Quay Lại Menu
         </button>
       </div>
 
@@ -338,6 +440,23 @@
           </div>
         </div>
         <div
+          id="botGameStatus"
+          class="hidden p-2 bg-gray-800 text-white rounded-b-lg mb-4"
+        >
+          <div class="text-sm font-bold text-center mb-1">Thi đấu với Máy</div>
+          <div class="flex justify-between items-center text-xs">
+            <span>🤖 Máy (<span id="botDifficultyDisplay"></span>)</span>
+            <span id="botProgressText">0%</span>
+          </div>
+          <div class="w-full bg-gray-600 rounded-full h-2 mt-1">
+            <div
+              id="botProgressBar"
+              class="bg-green-500 h-2 rounded-full transition-all duration-500"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+        <div
           id="statusMessage"
           class="text-center font-bold text-gray-700 py-2 bg-yellow-50 rounded-b-lg mb-4"
         >
@@ -345,8 +464,6 @@
         </div>
         <div id="multiplayerStatus" class="mb-4"></div>
         <div id="gameBoard" class="mb-4"></div>
-
-        <!-- UPDATED: Spectator View -->
         <div
           id="spectatorView"
           class="hidden text-center p-4 bg-gray-100 rounded-lg"
@@ -382,7 +499,6 @@
           ></div>
           <div id="spectatorStatusContainer" class="mt-6"></div>
         </div>
-
         <div id="game-controls" class="grid grid-cols-2 gap-3 mb-3">
           <button
             id="resetButton"
@@ -562,9 +678,32 @@
             >
           </div>
         </div>
+        <!-- Game Chat Container -->
+        <div id="multiplayerChatContainer" class="hidden mt-4">
+          <h3 class="font-bold text-lg mb-2 text-gray-700">Chat Trận Đấu</h3>
+          <div
+            id="gameChatMessages"
+            class="h-24 overflow-y-auto border rounded p-2 bg-gray-50 mb-2 flex flex-col"
+          ></div>
+          <form id="gameChatForm" class="flex gap-2">
+            <input
+              type="text"
+              id="gameChatInput"
+              placeholder="Nhập tin nhắn..."
+              class="flex-grow border rounded p-2"
+              autocomplete="off"
+            />
+            <button
+              type="submit"
+              class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold p-2 rounded-lg"
+            >
+              Gửi
+            </button>
+          </form>
+        </div>
       </div>
 
-      <!-- Custom Map View (used as a separate view/modal now) -->
+      <!-- Custom Map View -->
       <div id="customMapView" class="hidden">
         <button id="closeCustomMapButton" class="close-button">&times;</button>
         <h2 class="text-2xl font-bold text-gray-800 mb-4">
@@ -573,25 +712,25 @@
         <form id="customMapForm" class="space-y-4">
           <div>
             <label for="customRows" class="block font-medium"
-              >Số Dòng (5-100)</label
+              >Số Dòng (3-300)</label
             ><input
               type="number"
               id="customRows"
               value="16"
-              min="5"
-              max="100"
+              min="3"
+              max="300"
               class="w-full border rounded p-2"
             />
           </div>
           <div>
             <label for="customCols" class="block font-medium"
-              >Số Cột (5-100)</label
+              >Số Cột (3-300)</label
             ><input
               type="number"
               id="customCols"
               value="16"
-              min="5"
-              max="100"
+              min="3"
+              max="300"
               class="w-full border rounded p-2"
             />
           </div>
@@ -677,7 +816,7 @@
         </button>
       </div>
 
-      <!-- Multiplayer View -->
+      <!-- Multiplayer Lobby Selection View -->
       <div id="multiplayerView" class="hidden">
         <h2 class="text-2xl font-bold text-gray-800 mb-6">
           👥 Chơi Nhiều Người
@@ -730,7 +869,6 @@
             title="Sao chép ID"
           ></code>
         </div>
-        <!-- NEW: Room Link -->
         <div class="space-y-1 mb-4">
           <label
             for="lobbyRoomLink"
@@ -769,7 +907,6 @@
             </button>
           </div>
         </div>
-        <!-- END NEW -->
         <div
           id="lobbyHostControls"
           class="hidden space-y-3 mb-4 p-3 bg-gray-50 rounded-lg"
@@ -793,6 +930,13 @@
             </button>
           </div>
         </div>
+        <div
+          id="lobbyMapPreview"
+          class="hidden my-4 p-3 bg-blue-50 rounded-lg border border-blue-200"
+        >
+          <h3 class="font-bold text-blue-800">Thông số Map Được Chọn</h3>
+          <p id="lobbyMapPreviewDetails" class="text-blue-700 mt-1"></p>
+        </div>
         <div class="mb-4">
           <h3 class="font-bold text-lg mb-2">
             Người chơi (<span id="lobbyPlayerCount">1</span>)
@@ -805,9 +949,34 @@
         >
           Chờ chủ phòng bắt đầu...
         </div>
+
+        <!-- Lobby Chat -->
+        <div id="lobbyChatContainer" class="mt-4">
+          <h3 class="font-bold text-lg mb-2 text-gray-700">Chat Phòng</h3>
+          <div
+            id="lobbyChatMessages"
+            class="h-32 overflow-y-auto border rounded p-2 bg-gray-50 mb-2 flex flex-col"
+          ></div>
+          <form id="lobbyChatForm" class="flex gap-2">
+            <input
+              type="text"
+              id="lobbyChatInput"
+              placeholder="Nhập tin nhắn..."
+              class="flex-grow border rounded p-2"
+              autocomplete="off"
+            />
+            <button
+              type="submit"
+              class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg"
+            >
+              Gửi
+            </button>
+          </form>
+        </div>
+
         <button
           id="startGameButton"
-          class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg"
+          class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg mt-4"
         >
           Bắt Đầu
         </button>
@@ -836,7 +1005,8 @@
             required
             minlength="3"
             maxlength="20"
-          /><button
+          />
+          <button
             type="submit"
             id="submitDisplayNameButton"
             class="mt-4 w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
@@ -877,8 +1047,7 @@
           <ul class="list-disc list-inside ml-4 space-y-2 text-sm">
             <li><b>Tia X:</b> Mở một ô ngẫu nhiên chắc chắn không có mìn.</li>
             <li>
-              <b>Cờ Tự Động:</b> Tìm và cắm cờ vào một ô chắc chắn là mìn. Cờ
-              này sẽ có màu xanh.
+              <b>Cờ Tự Động:</b> Tìm và cắm cờ vào một ô chắc chắn là mìn.
             </li>
             <li><b>Lướt Sóng:</b> Tự động "Mở Nhanh" một ô hợp lệ.</li>
             <li>
@@ -912,8 +1081,9 @@
               id="closeCommandModalButton"
               class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
             >
-              Hủy</button
-            ><button
+              Hủy
+            </button>
+            <button
               type="submit"
               id="submitCommandButton"
               class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg"
@@ -930,6 +1100,10 @@
         <div id="gameOverIcon" class="text-7xl mb-4"></div>
         <h2 id="gameOverTitle" class="text-3xl font-extrabold mb-2"></h2>
         <p id="gameOverMessage" class="text-gray-600 mb-4"></p>
+        <div
+          id="gameOverBotResult"
+          class="hidden p-3 bg-gray-100 rounded-lg mb-4"
+        ></div>
         <div class="p-3 bg-gray-100 rounded-lg mb-6">
           <p class="text-sm text-gray-500">Thời gian hoàn thành</p>
           <p id="gameOverTime" class="text-4xl font-bold text-gray-800"></p>
@@ -950,8 +1124,6 @@
         </div>
       </div>
     </div>
-
-    <!-- NEW: Mine Hit Modal (Multiplayer) -->
     <div id="mineHitModal" class="modal-overlay">
       <div class="modal-content text-center">
         <div class="text-7xl mb-4">💥</div>
@@ -967,8 +1139,6 @@
         </button>
       </div>
     </div>
-
-    <!-- Leaderboard Modal -->
     <div id="leaderboardModal" class="modal-overlay">
       <div class="modal-content">
         <button
@@ -985,8 +1155,7 @@
             for="leaderboardMapSelect"
             class="block text-sm font-medium text-gray-700"
             >Chọn cấp độ:</label
-          >
-          >
+          >>
           <select
             id="leaderboardMapSelect"
             class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
@@ -1001,7 +1170,6 @@
         </button>
       </div>
     </div>
-
     <div
       id="toast-container"
       class="fixed top-5 right-5 z-[9999] space-y-2"
