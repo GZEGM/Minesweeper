@@ -626,8 +626,12 @@ function showToast(message, type = "info") {
     success: "bg-green-500",
     error: "bg-red-500",
   };
-  toast.className = `transform transition-all duration-300 ease-in-out translate-x-full opacity-0 p-4 rounded-lg text-white shadow-lg ${colors[type]}`;
-  toast.textContent = message;
+  toast.className = `transform transition-all duration-300 ease-in-out translate-x-full opacity-0 p-4 rounded-lg text-white shadow-lg ${colors[type]} max-w-md`;
+
+  // FIX: Sửa lỗi hiển thị thông báo nhiều dòng (ví dụ: /help)
+  // Sử dụng innerHTML và thay thế ký tự '\n' bằng thẻ <br> để trình duyệt có thể hiển thị xuống dòng.
+  toast.innerHTML = message.replace(/\n/g, "<br>");
+
   container.appendChild(toast);
   setTimeout(() => {
     toast.classList.remove("translate-x-full", "opacity-0");
@@ -637,7 +641,7 @@ function showToast(message, type = "info") {
     setTimeout(() => {
       toast.remove();
     }, 300);
-  }, 4000);
+  }, 5000); // Tăng thời gian hiển thị cho các thông báo dài
 }
 
 // === FIREBASE FUNCTIONS ===
@@ -843,34 +847,65 @@ async function sendChatMessage(roomId, message, inputEl) {
   await logRoomEvent(roomId, "chat", { message: message.trim() });
   inputEl.value = "";
 }
-function setupRoomEventListener(roomId) {
-  if (roomEventsListener) off(roomEventsListener);
-  const eventsRef = query(
-    ref(db, `/artifacts/${appId}/public/data/rooms/${roomId}/events`),
-    startAt(Date.now())
+function appendChatMessage(event) {
+  const messagesEl = VIEWS.lobby.classList.contains("hidden")
+    ? gameChatMessagesEl
+    : lobbyChatMessagesEl;
+  const msgDiv = document.createElement("div");
+  const isMe = event.senderId === userId;
+  msgDiv.classList.add("chat-message", isMe ? "me" : "other");
+  msgDiv.innerHTML = `<b class="text-xs">${event.senderName}:</b><p>${event.payload.message}</p>`;
+  messagesEl.appendChild(msgDiv);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+async function setupRoomEventListener(roomId) {
+  // FIX: Sửa lỗi logic lắng nghe sự kiện chat
+  // Hủy listener cũ nếu có để tránh việc lắng nghe nhiều lần trên cùng một phòng
+  if (roomEventsListener) {
+    const oldEventsRef = ref(
+      db,
+      `/artifacts/${appId}/public/data/rooms/${currentRoomId}/events`
+    );
+    off(oldEventsRef, "child_added", roomEventsListener);
+  }
+
+  const eventsRef = ref(
+    db,
+    `/artifacts/${appId}/public/data/rooms/${roomId}/events`
   );
-  roomEventsListener = onChildAdded(eventsRef, (snapshot) => {
+  const chatMessagesEl = VIEWS.lobby.classList.contains("hidden")
+    ? gameChatMessagesEl
+    : lobbyChatMessagesEl;
+  chatMessagesEl.innerHTML = ""; // Xóa tin nhắn cũ khi vào phòng
+
+  // Tạo một query để chỉ lấy 50 tin nhắn cuối cùng, tránh tải toàn bộ lịch sử chat
+  const messagesQuery = query(eventsRef, limitToLast(50));
+
+  // Lắng nghe sự kiện 'child_added'.
+  // Listener này sẽ được kích hoạt cho các tin nhắn đã có (do limitToLast)
+  // và cho bất kỳ tin nhắn mới nào được thêm vào sau đó.
+  // Đây là cách làm đơn giản và đúng đắn nhất để nhận cả tin nhắn cũ và mới.
+  roomEventsListener = onChildAdded(messagesQuery, (snapshot) => {
     const event = snapshot.val();
     if (!event) return;
-    if (event.senderId === userId) return; // Don't show toast for my own actions
+
+    const isMe = event.senderId === userId;
 
     switch (event.type) {
       case "chat":
-        const messagesEl = VIEWS.lobby.classList.contains("hidden")
-          ? gameChatMessagesEl
-          : lobbyChatMessagesEl;
-        const msgDiv = document.createElement("div");
-        msgDiv.classList.add("chat-message", "other");
-        msgDiv.innerHTML = `<b class="text-xs">${event.senderName}:</b><p>${event.payload.message}</p>`;
-        messagesEl.appendChild(msgDiv);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-        showToast(`${event.senderName}: ${event.payload.message}`, "info");
+        appendChatMessage(event);
+        // Chỉ hiển thị thông báo toast cho tin nhắn của người khác
+        if (!isMe) {
+          showToast(`${event.senderName}: đã gửi một tin nhắn`, "info");
+        }
         break;
       case "helper_used":
-        showToast(
-          `${event.senderName} đã dùng ${event.payload.helper}.`,
-          "info"
-        );
+        if (!isMe) {
+          showToast(
+            `${event.senderName} đã dùng ${event.payload.helper}.`,
+            "info"
+          );
+        }
         break;
     }
   });
@@ -936,7 +971,7 @@ async function showHistoryModal() {
 
   const historyQuery = query(
     ref(db, `/artifacts/${appId}/users/${userId}/gameHistory`),
-    limitToLast(50)
+    orderByChild("timestamp")
   );
   try {
     const snapshot = await get(historyQuery);
@@ -999,7 +1034,7 @@ function startGame(mapConfig, seed = Date.now(), options = {}) {
     botState = { difficulty: options.botDifficulty };
     isGameStarted = true;
     placeMines(-1, -1);
-    startTimer();
+    startTimer(); // Start player timer immediately
     updateHelperDisplay();
     startBot(options.botDifficulty, mapConfig);
     botGameStatusEl.classList.remove("hidden");
@@ -1357,7 +1392,7 @@ function processCommand(input) {
       let helpMsg = AVAILABLE_COMMANDS.map((c) => `${c.cmd} - ${c.desc}`).join(
         "\n"
       );
-      showToast(helpMsg);
+      showToast(helpMsg, "info");
       break;
     case "/admin":
       isAdmin = !isAdmin;
@@ -1464,9 +1499,11 @@ function leaveRoom() {
     currentRoomListener = null;
   }
   if (roomEventsListener) {
-    off(
-      ref(db, `/artifacts/${appId}/public/data/rooms/${currentRoomId}/events`)
+    const eventsRef = ref(
+      db,
+      `/artifacts/${appId}/public/data/rooms/${currentRoomId}/events`
     );
+    off(eventsRef, "child_added", roomEventsListener);
     roomEventsListener = null;
   }
   if (myMatchmakingLobbyRef) {
@@ -1479,6 +1516,8 @@ function leaveRoom() {
   );
   onDisconnect(playerRef).cancel();
   remove(playerRef);
+
+  sessionStorage.removeItem(SESSION_STATE_KEY);
 
   currentRoomId = null;
   isMultiplayer = false;
@@ -1536,7 +1575,7 @@ function setupLobbyView(roomId) {
     lastPlayerList = players;
     const isMatchmaking = roomData.isMatchmaking;
     lobbyHostControlsEl.classList.toggle("hidden", isMatchmaking);
-    startGameButton.classList.toggle("hidden", !isMatchmaking);
+    startGameButton.classList.toggle("hidden", isMatchmaking);
     readyButton.classList.toggle("hidden", !isMatchmaking);
     if (isMatchmaking) {
       startGameButton.classList.add("hidden");
@@ -2254,6 +2293,7 @@ async function checkForSession() {
   if (sessionDataJSON) {
     sessionStorage.removeItem(SESSION_STATE_KEY); // Consume it
     const sessionData = JSON.parse(sessionDataJSON);
+    if (sessionData.view === "mainMenu") return false; // Don't reconnect if user was at menu
     if (sessionData.roomId) {
       await rejoinGame(sessionData.roomId);
       return true; // Session was handled
@@ -2290,6 +2330,18 @@ async function rejoinGame(roomId) {
     const playerState = roomData.players[userId].boardState;
     if (playerState) {
       await applyRemoteBoardState(playerState);
+      const progress = Math.round(
+        (cellsRevealed /
+          (currentMapConfig.rows * currentMapConfig.cols - currentNumMines)) *
+          100
+      );
+      set(
+        ref(
+          db,
+          `/artifacts/${appId}/public/data/rooms/${roomId}/players/${userId}/progress`
+        ),
+        progress
+      );
     }
 
     // Listen for further updates
@@ -2567,14 +2619,17 @@ window.addEventListener("beforeunload", (e) => {
       (key) => !VIEWS[key].classList.contains("hidden")
     );
 
-    if (currentView === "lobby" && currentRoomId) {
-      sessionData = { view: "lobby", roomId: currentRoomId };
-    } else if (currentView === "game" && isMultiplayer && currentRoomId) {
-      sessionData = {
-        view: "game",
-        mode: "multiplayer",
-        roomId: currentRoomId,
-      };
+    // Only save session if not on the main menu
+    if (currentView !== "mainMenu") {
+      if (currentView === "lobby" && currentRoomId) {
+        sessionData = { view: "lobby", roomId: currentRoomId };
+      } else if (currentView === "game" && isMultiplayer && currentRoomId) {
+        sessionData = {
+          view: "game",
+          mode: "multiplayer",
+          roomId: currentRoomId,
+        };
+      }
     }
 
     if (Object.keys(sessionData).length > 0) {
