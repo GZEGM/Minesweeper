@@ -282,6 +282,30 @@
             >...</span
           >
         </p>
+
+        <!-- Resume Game Prompt -->
+        <div
+          id="resumeGamePrompt"
+          class="hidden p-4 mb-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 rounded-lg"
+        >
+          <h3 class="font-bold">Tìm thấy ván chơi đơn!</h3>
+          <p>Bạn có muốn tiếp tục ván chơi trước không?</p>
+          <div class="mt-3 flex gap-3">
+            <button
+              id="resumeGameBtn"
+              class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Tiếp Tục
+            </button>
+            <button
+              id="discardGameBtn"
+              class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Bỏ Qua
+            </button>
+          </div>
+        </div>
+
         <div class="grid grid-cols-2 gap-3 mb-4">
           <button
             id="playWithBotMenuButton"
@@ -316,12 +340,20 @@
           id="mapSelection"
           class="grid grid-cols-1 md:grid-cols-2 gap-3"
         ></div>
-        <button
-          id="leaderboardMenuButton"
-          class="mt-4 w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
-        >
-          🏆 Bảng Xếp Hạng
-        </button>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <button
+            id="leaderboardMenuButton"
+            class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-teal-300"
+          >
+            🏆 Bảng Xếp Hạng
+          </button>
+          <button
+            id="historyMenuButton"
+            class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 rounded-lg transition duration-200 transform hover:scale-[1.01] shadow-md shadow-cyan-300"
+          >
+            📜 Lịch Sử Đấu
+          </button>
+        </div>
       </div>
 
       <!-- Play With Bot View -->
@@ -371,26 +403,26 @@
       <div id="matchmakingView" class="hidden">
         <h2 class="text-2xl font-bold text-gray-800 mb-4">⚔️ Ghép Trận</h2>
         <p class="text-center text-gray-600 mb-4">
-          Chọn chế độ để tìm trận. Chỉ áp dụng cho map Tiêu Chuẩn và Thử Thách.
+          Chọn số lượng người chơi để tìm phòng.
         </p>
         <div id="matchmakingOptions" class="space-y-3">
           <button
-            data-mode="1v1"
+            data-players="2"
             class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
           >
-            1 vs 1
+            2 Người
           </button>
           <button
-            data-mode="2v2"
+            data-players="3"
             class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
           >
-            2 vs 2
+            3 Người
           </button>
           <button
-            data-mode="3v3"
+            data-players="4"
             class="find-match-button w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg"
           >
-            3 vs 3
+            4 Người
           </button>
         </div>
         <div
@@ -572,8 +604,9 @@
                 stroke-linejoin="round"
               >
                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-                <circle cx="12" cy="12" r="3" /></svg
-              ><span class="helper-icon-count" id="xrayCount">0</span>
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span class="helper-icon-count" id="xrayCount">0</span>
             </button>
             <button
               id="autoFlagButton"
@@ -594,8 +627,9 @@
                 <path
                   d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"
                 />
-                <line x1="4" x2="4" y1="22" y2="15" /></svg
-              ><span class="helper-icon-count" id="autoFlagCount">0</span>
+                <line x1="4" x2="4" y1="22" y2="15" />
+              </svg>
+              <span class="helper-icon-count" id="autoFlagCount">0</span>
             </button>
             <button
               id="surferButton"
@@ -613,14 +647,15 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
-                <path d="M2 20a2 2 0 1 0 4 0 2 2 0 1 0-4 0" />
-                <path d="M14 20a2 2 0 1 0 4 0 2 2 0 1 0-4 0" />
-                <path d="M6 16.63V18a2 2 0 1 0 4 0v-1.38" />
-                <path d="M18 16.63V18a2 2 0 1 0 4 0v-1.38" />
-                <path
-                  d="M2.54 13.97l2.88 4.75a1 1 0 0 0 1.63.15l2.45-3.66a1 1 0 0 1 1.05-.14l2.87 1.8a1 1 0 0 0 1.54-.93l-.33-4.32a1 1 0 0 1 .42-1.07l2.22-1.63a1 1 0 0 0 .52-1.29l-1.48-4.22"
-                /></svg
-              ><span class="helper-icon-count" id="surferCount">0</span>
+                <path d="M14.5 16.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                <path d="M6 22a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+                <path d="M12 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" />
+                <path d="m19.5 12.5-4.4-2.2" />
+                <path d="m6.2 13.1-2.9-1.3" />
+                <path d="m14.2 7.2-.6-4.9" />
+                <path d="m10.1 19.3-1.2-4.1" />
+              </svg>
+              <span class="helper-icon-count" id="surferCount">0</span>
             </button>
             <button
               id="shieldButton"
@@ -638,8 +673,9 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
               >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
-              ><span class="helper-icon-count" id="shieldCount">0</span>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <span class="helper-icon-count" id="shieldCount">0</span>
             </button>
             <button
               id="scannerButton"
@@ -659,8 +695,9 @@
               >
                 <circle cx="12" cy="12" r="10" />
                 <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" /></svg
-              ><span class="helper-icon-count" id="scannerCount">0</span>
+                <circle cx="12" cy="12" r="2" />
+              </svg>
+              <span class="helper-icon-count" id="scannerCount">0</span>
             </button>
           </div>
         </div>
@@ -672,8 +709,8 @@
             Thành Tích Cá Nhân
           </h3>
           <div class="flex justify-between text-sm text-gray-700 mt-2">
-            <span class="font-semibold">Thời gian tốt nhất:</span
-            ><span id="personalBestTime" class="font-bold text-lg text-blue-900"
+            <span class="font-semibold">Thời gian tốt nhất:</span>
+            <span id="personalBestTime" class="font-bold text-lg text-blue-900"
               >--s</span
             >
           </div>
@@ -713,7 +750,8 @@
           <div>
             <label for="customRows" class="block font-medium"
               >Số Dòng (3-300)</label
-            ><input
+            >
+            <input
               type="number"
               id="customRows"
               value="16"
@@ -725,7 +763,8 @@
           <div>
             <label for="customCols" class="block font-medium"
               >Số Cột (3-300)</label
-            ><input
+            >
+            <input
               type="number"
               id="customCols"
               value="16"
@@ -735,8 +774,8 @@
             />
           </div>
           <div>
-            <label for="customMines" class="block font-medium">Số Mìn</label
-            ><input
+            <label for="customMines" class="block font-medium">Số Mìn</label>
+            <input
               type="number"
               id="customMines"
               value="40"
@@ -747,8 +786,8 @@
           <h3 class="font-bold pt-2">Số Lượng Phụ Trợ</h3>
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label for="customXray">Tia X</label
-              ><input
+              <label for="customXray">Tia X</label>
+              <input
                 type="number"
                 id="customXray"
                 value="3"
@@ -758,8 +797,8 @@
               />
             </div>
             <div>
-              <label for="customAutoFlag">Cờ Tự Động</label
-              ><input
+              <label for="customAutoFlag">Cờ Tự Động</label>
+              <input
                 type="number"
                 id="customAutoFlag"
                 value="3"
@@ -769,8 +808,8 @@
               />
             </div>
             <div>
-              <label for="customSurfer">Lướt Sóng</label
-              ><input
+              <label for="customSurfer">Lướt Sóng</label>
+              <input
                 type="number"
                 id="customSurfer"
                 value="2"
@@ -780,8 +819,8 @@
               />
             </div>
             <div>
-              <label for="customShield">Khiên</label
-              ><input
+              <label for="customShield">Khiên</label>
+              <input
                 type="number"
                 id="customShield"
                 value="2"
@@ -791,8 +830,8 @@
               />
             </div>
             <div>
-              <label for="customScanner">Máy Dò</label
-              ><input
+              <label for="customScanner">Máy Dò</label>
+              <input
                 type="number"
                 id="customScanner"
                 value="2"
@@ -916,7 +955,8 @@
             <div class="flex-grow">
               <label for="lobbyMapSelect" class="block text-sm font-medium"
                 >Chọn Map:</label
-              ><select
+              >
+              <select
                 id="lobbyMapSelect"
                 class="w-full border rounded p-2"
               ></select>
@@ -979,6 +1019,12 @@
           class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg mt-4"
         >
           Bắt Đầu
+        </button>
+        <button
+          id="readyButton"
+          class="hidden w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg text-lg mt-4"
+        >
+          Sẵn Sàng
         </button>
         <button
           id="leaveLobbyButton"
@@ -1155,13 +1201,33 @@
             for="leaderboardMapSelect"
             class="block text-sm font-medium text-gray-700"
             >Chọn cấp độ:</label
-          >>
+          >
           <select
             id="leaderboardMapSelect"
             class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
           ></select>
         </div>
         <div id="leaderboardModalContent" class="space-y-2"></div>
+        <button
+          onclick="this.parentElement.parentElement.style.display='none'"
+          class="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+    <div id="historyModal" class="modal-overlay">
+      <div class="modal-content">
+        <button
+          class="close-button"
+          onclick="this.parentElement.parentElement.style.display='none'"
+        >
+          &times;
+        </button>
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">
+          📜 Lịch Sử Đấu
+        </h2>
+        <div id="historyModalContent" class="space-y-2"></div>
         <button
           onclick="this.parentElement.parentElement.style.display='none'"
           class="mt-6 w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 rounded-lg transition"
